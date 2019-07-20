@@ -423,8 +423,7 @@
 
                     try
                     {
-                        msg = new WatsonMessage(_Server.TrafficStream);
-                        await msg.Build(ReadDataStream);
+                        msg = await _Server.MessageReadAsync(ReadDataStream);
                     }
                     finally
                     {

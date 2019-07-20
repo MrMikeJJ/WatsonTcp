@@ -646,7 +646,7 @@
                             break;
                         }
 
-                        WatsonMessage msg = await MessageReadAsync(client);
+                        WatsonMessage msg = await client.MessageReadAsync(ReadDataStream);
                         if (msg == null)
                         {
                             // no message available
@@ -776,20 +776,6 @@
 
             Common.Log("*** RemoveClient removed client " + client.IpPort);
             return true;
-        }
-
-        private async Task<WatsonMessage> MessageReadAsync(ClientMetadata client)
-        {
-            /*
-             *
-             * Do not catch exceptions, let them get caught by the data reader
-             * to destroy the connection
-             *
-             */
-
-            WatsonMessage msg = new WatsonMessage(client.TrafficStream);
-            await msg.Build(ReadDataStream);
-            return msg;
         }
 
         private bool MessageWrite(ClientMetadata client, WatsonMessage msg, byte[] data)

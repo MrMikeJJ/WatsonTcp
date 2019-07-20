@@ -6,6 +6,8 @@
     using System.Net.Sockets;
     using System.Security.Cryptography.X509Certificates;
     using System.Threading;
+    using System.Threading.Tasks;
+    using WatsonTcp.Message;
 
     internal class ClientMetadata : IDisposable
     {
@@ -111,6 +113,17 @@
             WriteLock.Dispose();
 
             _Disposed = true;
+        }
+
+        #endregion
+
+        #region Internal-Methods
+
+        internal async Task<WatsonMessage> MessageReadAsync(bool readDataStream)
+        {
+            WatsonMessage msg = new WatsonMessage(TrafficStream);
+            await msg.Build(readDataStream);
+            return msg;
         }
 
         #endregion
