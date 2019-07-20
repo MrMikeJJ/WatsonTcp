@@ -250,7 +250,7 @@
 
                 client.EndConnect(asyncResult);
 
-                ClientMetadata _Server = new ClientMetadata(client, _Mode, AcceptInvalidCertificates);
+                _Server = new ClientMetadata(client, _Mode, AcceptInvalidCertificates);
                 if (_Mode == Mode.Ssl)
                 {
                     _Server.SslStream.AuthenticateAsClient(_ServerIp, _SslCertificateCollection, SslProtocols.Tls12, !AcceptInvalidCertificates);
