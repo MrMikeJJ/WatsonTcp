@@ -2,7 +2,6 @@
 {
     using System;
     using System.IO;
-    using System.Net.Security;
     using System.Net.Sockets;
     using System.Security.Authentication;
     using System.Security.Cryptography.X509Certificates;
@@ -43,7 +42,11 @@
         /// <summary>
         /// Enable or disable console debugging.
         /// </summary>
-        public bool Debug = false;
+        public bool Debug
+        {
+            get => Common._Debug;
+            set => Common._Debug = value;
+        }
 
         /// <summary>
         /// Function called when authentication is requested from the server.  Expects the 16-byte preshared key.
@@ -226,11 +229,11 @@
 
             if (_Mode == Mode.Tcp)
             {
-                Log("Watson TCP client connecting to " + _ServerIp + ":" + _ServerPort);
+                Common.Log("Watson TCP client connecting to " + _ServerIp + ":" + _ServerPort);
             }
             else if (_Mode == Mode.Ssl)
             {
-                Log("Watson TCP client connecting with SSL to " + _ServerIp + ":" + _ServerPort);
+                Common.Log("Watson TCP client connecting with SSL to " + _ServerIp + ":" + _ServerPort);
             }
 
             client.LingerState = new LingerOption(true, 0);
@@ -380,14 +383,6 @@
 
         #region Private-Methods
 
-        private void Log(string msg)
-        {
-            if (Debug)
-            {
-                Console.WriteLine(msg);
-            }
-        }
-
         private async Task DataReceiver(CancellationToken? cancelToken = null)
         {
             try
@@ -402,19 +397,19 @@
 
                     if (_Server.TcpClient == null)
                     {
-                        Log("*** DataReceiver null TCP interface detected, disconnection or close assumed");
+                        Common.Log("*** DataReceiver null TCP interface detected, disconnection or close assumed");
                         break;
                     }
 
                     if (!_Server.TcpClient.Connected)
                     {
-                        Log("*** DataReceiver server disconnected");
+                        Common.Log("*** DataReceiver server disconnected");
                         break;
                     }
 
                     if (_Server.SslStream != null && !_Server.SslStream.CanRead)
                     {
-                        Log("*** DataReceiver cannot read from SSL stream");
+                        Common.Log("*** DataReceiver cannot read from SSL stream");
                         break;
                     }
 
@@ -428,7 +423,7 @@
 
                     try
                     {
-                        msg = new WatsonMessage(_Server.TrafficStream, Debug);
+                        msg = new WatsonMessage(_Server.TrafficStream);
                         await msg.Build(ReadDataStream);
                     }
                     finally
@@ -444,20 +439,20 @@
 
                     if (msg.Status == MessageStatus.AuthSuccess)
                     {
-                        Log("DataReceiver successfully authenticated");
+                        Common.Log("DataReceiver successfully authenticated");
                         AuthenticationSucceeded?.Invoke();
                         continue;
                     }
                     else if (msg.Status == MessageStatus.AuthFailure)
                     {
-                        Log("DataReceiver authentication failed, please authenticate using pre-shared key");
+                        Common.Log("DataReceiver authentication failed, please authenticate using pre-shared key");
                         AuthenticationFailure?.Invoke();
                         continue;
                     }
 
                     if (msg.Status == MessageStatus.AuthRequired)
                     {
-                        Log("DataReceiver authentication required, please authenticate using pre-shared key");
+                        Common.Log("DataReceiver authentication required, please authenticate using pre-shared key");
                         if (AuthenticationRequested != null)
                         {
                             string psk = AuthenticationRequested();
@@ -498,11 +493,8 @@
             }
             catch (Exception e)
             {
-                if (Debug)
-                {
-                    Log("*** DataReceiver server disconnected unexpectedly");
-                    Log(Common.SerializeJson(e));
-                }
+                Common.Log("*** DataReceiver server disconnected unexpectedly");
+                Common.Log(Common.SerializeJson(e));
             }
             finally
             {
@@ -524,7 +516,7 @@
             {
                 if (_Server.TcpClient == null)
                 {
-                    Log("MessageWrite client is null");
+                    Common.Log("MessageWrite client is null");
                     disconnectDetected = true;
                     return false;
                 }
@@ -549,36 +541,36 @@
                 }
 
                 string logMessage = "MessageWrite sent " + Encoding.UTF8.GetString(headerBytes);
-                Log(logMessage);
+                Common.Log(logMessage);
                 return true;
             }
             catch (ObjectDisposedException ObjDispInner)
             {
-                Log("*** MessageWrite server disconnected (obj disposed exception): " + ObjDispInner.Message);
+                Common.Log("*** MessageWrite server disconnected (obj disposed exception): " + ObjDispInner.Message);
                 disconnectDetected = true;
                 return false;
             }
             catch (SocketException SockInner)
             {
-                Log("*** MessageWrite server disconnected (socket exception): " + SockInner.Message);
+                Common.Log("*** MessageWrite server disconnected (socket exception): " + SockInner.Message);
                 disconnectDetected = true;
                 return false;
             }
             catch (InvalidOperationException InvOpInner)
             {
-                Log("*** MessageWrite server disconnected (invalid operation exception): " + InvOpInner.Message);
+                Common.Log("*** MessageWrite server disconnected (invalid operation exception): " + InvOpInner.Message);
                 disconnectDetected = true;
                 return false;
             }
             catch (IOException IOInner)
             {
-                Log("*** MessageWrite server disconnected (IO exception): " + IOInner.Message);
+                Common.Log("*** MessageWrite server disconnected (IO exception): " + IOInner.Message);
                 disconnectDetected = true;
                 return false;
             }
             catch (Exception e)
             {
-                Log(Common.SerializeJson(e));
+                Common.Log(Common.SerializeJson(e));
                 disconnectDetected = true;
                 return false;
             }
@@ -630,12 +622,12 @@
             {
                 if (_Server.TcpClient == null)
                 {
-                    Log("MessageWrite client is null");
+                    Common.Log("MessageWrite client is null");
                     disconnectDetected = true;
                     return false;
                 }
 
-                WatsonMessage msg = new WatsonMessage(contentLength, stream, Debug);
+                WatsonMessage msg = new WatsonMessage(contentLength, stream);
                 byte[] headerBytes = msg.ToHeaderBytes(contentLength);
 
                 int bytesRead = 0;
@@ -669,30 +661,30 @@
                 }
 
                 string logMessage = "MessageWrite sent " + Encoding.UTF8.GetString(headerBytes);
-                Log(logMessage);
+                Common.Log(logMessage);
                 return true;
             }
             catch (ObjectDisposedException ObjDispInner)
             {
-                Log("*** MessageWrite server disconnected (obj disposed exception): " + ObjDispInner.Message);
+                Common.Log("*** MessageWrite server disconnected (obj disposed exception): " + ObjDispInner.Message);
                 disconnectDetected = true;
                 return false;
             }
             catch (SocketException SockInner)
             {
-                Log("*** MessageWrite server disconnected (socket exception): " + SockInner.Message);
+                Common.Log("*** MessageWrite server disconnected (socket exception): " + SockInner.Message);
                 disconnectDetected = true;
                 return false;
             }
             catch (InvalidOperationException InvOpInner)
             {
-                Log("*** MessageWrite server disconnected (invalid operation exception): " + InvOpInner.Message);
+                Common.Log("*** MessageWrite server disconnected (invalid operation exception): " + InvOpInner.Message);
                 disconnectDetected = true;
                 return false;
             }
             catch (IOException IOInner)
             {
-                Log("*** MessageWrite server disconnected (IO exception): " + IOInner.Message);
+                Common.Log("*** MessageWrite server disconnected (IO exception): " + IOInner.Message);
                 disconnectDetected = true;
                 return false;
             }
@@ -749,12 +741,12 @@
             {
                 if (_Server.TcpClient == null)
                 {
-                    Log("MessageWriteAsync client is null");
+                    Common.Log("MessageWriteAsync client is null");
                     disconnectDetected = true;
                     return false;
                 }
 
-                WatsonMessage msg = new WatsonMessage(contentLength, stream, Debug);
+                WatsonMessage msg = new WatsonMessage(contentLength, stream);
                 byte[] headerBytes = msg.ToHeaderBytes(contentLength);
 
                 int bytesRead = 0;
@@ -788,30 +780,30 @@
                 }
 
                 string logMessage = "MessageWriteAsync sent " + Encoding.UTF8.GetString(headerBytes);
-                Log(logMessage);
+                Common.Log(logMessage);
                 return true;
             }
             catch (ObjectDisposedException ObjDispInner)
             {
-                Log("*** MessageWriteAsync server disconnected (obj disposed exception): " + ObjDispInner.Message);
+                Common.Log("*** MessageWriteAsync server disconnected (obj disposed exception): " + ObjDispInner.Message);
                 disconnectDetected = true;
                 return false;
             }
             catch (SocketException SockInner)
             {
-                Log("*** MessageWriteAsync server disconnected (socket exception): " + SockInner.Message);
+                Common.Log("*** MessageWriteAsync server disconnected (socket exception): " + SockInner.Message);
                 disconnectDetected = true;
                 return false;
             }
             catch (InvalidOperationException InvOpInner)
             {
-                Log("*** MessageWriteAsync server disconnected (invalid operation exception): " + InvOpInner.Message);
+                Common.Log("*** MessageWriteAsync server disconnected (invalid operation exception): " + InvOpInner.Message);
                 disconnectDetected = true;
                 return false;
             }
             catch (IOException IOInner)
             {
-                Log("*** MessageWriteAsync server disconnected (IO exception): " + IOInner.Message);
+                Common.Log("*** MessageWriteAsync server disconnected (IO exception): " + IOInner.Message);
                 disconnectDetected = true;
                 return false;
             }

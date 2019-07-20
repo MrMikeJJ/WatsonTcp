@@ -7,6 +7,8 @@
 
     public static class Common
     {
+        internal static bool _Debug;
+
         /// <summary>
         /// Serialize an object to JSON.
         /// </summary>
@@ -241,6 +243,14 @@
             }
 
             return BitConverter.ToString(bytes).Replace("-", String.Empty);
+        }
+
+        public static void Log(string msg)
+        {
+            if (_Debug)
+            {
+                Console.WriteLine(msg);
+            }
         }
 
         public static void LogException(String method, Exception e)

@@ -46,7 +46,11 @@
         /// <summary>
         /// Enable or disable console debugging.
         /// </summary>
-        public bool Debug = false;
+        public bool Debug
+        {
+            get => Common._Debug;
+            set => Common._Debug = value;
+        }
 
         /// <summary>
         /// Permitted IP addresses.
@@ -213,11 +217,11 @@
         {
             if (_Mode == Mode.Tcp)
             {
-                Log("Watson TCP server starting on " + _ListenerIp + ":" + _ListenerPort);
+                Common.Log("Watson TCP server starting on " + _ListenerIp + ":" + _ListenerPort);
             }
             else if (_Mode == Mode.Ssl)
             {
-                Log("Watson TCP SSL server starting on " + _ListenerIp + ":" + _ListenerPort);
+                Common.Log("Watson TCP SSL server starting on " + _ListenerIp + ":" + _ListenerPort);
             }
 
             Task.Run(() => AcceptConnections(), _Token);
@@ -233,11 +237,11 @@
         {
             if (!_Clients.TryGetValue(ipPort, out ClientMetadata client))
             {
-                Log("*** Send unable to find client " + ipPort);
+                Common.Log("*** Send unable to find client " + ipPort);
                 return false;
             }
 
-            WatsonMessage msg = new WatsonMessage(data, Debug);
+            WatsonMessage msg = new WatsonMessage(data);
             return MessageWrite(client, msg, data);
         }
 
@@ -252,11 +256,11 @@
         {
             if (!_Clients.TryGetValue(ipPort, out ClientMetadata client))
             {
-                Log("*** Send unable to find client " + ipPort);
+                Common.Log("*** Send unable to find client " + ipPort);
                 return false;
             }
 
-            WatsonMessage msg = new WatsonMessage(contentLength, stream, Debug);
+            WatsonMessage msg = new WatsonMessage(contentLength, stream);
             return MessageWrite(client, msg, contentLength, stream);
         }
 
@@ -270,11 +274,11 @@
         {
             if (!_Clients.TryGetValue(ipPort, out ClientMetadata client))
             {
-                Log("*** SendAsync unable to find client " + ipPort);
+                Common.Log("*** SendAsync unable to find client " + ipPort);
                 return false;
             }
 
-            WatsonMessage msg = new WatsonMessage(data, Debug);
+            WatsonMessage msg = new WatsonMessage(data);
             return await MessageWriteAsync(client, msg, data);
         }
 
@@ -289,11 +293,11 @@
         {
             if (!_Clients.TryGetValue(ipPort, out ClientMetadata client))
             {
-                Log("*** SendAsync unable to find client " + ipPort);
+                Common.Log("*** SendAsync unable to find client " + ipPort);
                 return false;
             }
 
-            WatsonMessage msg = new WatsonMessage(contentLength, stream, Debug);
+            WatsonMessage msg = new WatsonMessage(contentLength, stream);
             return await MessageWriteAsync(client, msg, contentLength, stream);
         }
 
@@ -329,7 +333,7 @@
         {
             if (!_Clients.TryGetValue(ipPort, out ClientMetadata client))
             {
-                Log("*** DisconnectClient unable to find client " + ipPort);
+                Common.Log("*** DisconnectClient unable to find client " + ipPort);
             }
             else
             {
@@ -375,14 +379,6 @@
 
         #region Private-Methods
 
-        private void Log(string msg)
-        {
-            if (Debug)
-            {
-                Console.WriteLine(msg);
-            }
-        }
-
         private async Task AcceptConnections()
         {
             _Listener.Start();
@@ -402,7 +398,7 @@
                     {
                         if (!PermittedIPs.Contains(clientIp))
                         {
-                            Log("*** AcceptConnections rejecting connection from " + clientIp + " (not permitted)");
+                            Common.Log("*** AcceptConnections rejecting connection from " + clientIp + " (not permitted)");
                             tcpClient.Close();
                             continue;
                         }
@@ -437,11 +433,11 @@
                         #endregion
                     }
 
-                    Log("*** AcceptConnections accepted connection from " + client.IpPort);
+                    Common.Log("*** AcceptConnections accepted connection from " + client.IpPort);
                 }
                 catch (Exception e)
                 {
-                    Log("*** AcceptConnections exception " + clientIpPort + " " + e.Message);
+                    Common.Log("*** AcceptConnections exception " + clientIpPort + " " + e.Message);
                 }
             }
         }
@@ -454,21 +450,21 @@
 
                 if (!client.SslStream.IsEncrypted)
                 {
-                    Log("*** StartTls stream from " + client.IpPort + " not encrypted");
+                    Common.Log("*** StartTls stream from " + client.IpPort + " not encrypted");
                     client.Dispose();
                     return false;
                 }
 
                 if (!client.SslStream.IsAuthenticated)
                 {
-                    Log("*** StartTls stream from " + client.IpPort + " not authenticated");
+                    Common.Log("*** StartTls stream from " + client.IpPort + " not authenticated");
                     client.Dispose();
                     return false;
                 }
 
                 if (MutuallyAuthenticate && !client.SslStream.IsMutuallyAuthenticated)
                 {
-                    Log("*** StartTls stream from " + client.IpPort + " failed mutual authentication");
+                    Common.Log("*** StartTls stream from " + client.IpPort + " failed mutual authentication");
                     client.Dispose();
                     return false;
                 }
@@ -480,13 +476,13 @@
                 {
                     case "Authentication failed because the remote party has closed the transport stream.":
                     case "Unable to read data from the transport connection: An existing connection was forcibly closed by the remote host.":
-                        Log("*** StartTls IOException " + client.IpPort + " closed the connection.");
+                        Common.Log("*** StartTls IOException " + client.IpPort + " closed the connection.");
                         break;
                     case "The handshake failed due to an unexpected packet format.":
-                        Log("*** StartTls IOException " + client.IpPort + " disconnected, invalid handshake.");
+                        Common.Log("*** StartTls IOException " + client.IpPort + " disconnected, invalid handshake.");
                         break;
                     default:
-                        Log("*** StartTls IOException from " + client.IpPort + Environment.NewLine + ex.ToString());
+                        Common.Log("*** StartTls IOException from " + client.IpPort + Environment.NewLine + ex.ToString());
                         break;
                 }
 
@@ -495,7 +491,7 @@
             }
             catch (Exception ex)
             {
-                Log("*** StartTls Exception from " + client.IpPort + Environment.NewLine + ex.ToString());
+                Common.Log("*** StartTls Exception from " + client.IpPort + Environment.NewLine + ex.ToString());
                 client.Dispose();
                 return false;
             }
@@ -509,7 +505,7 @@
 
             if (!AddClient(client))
             {
-                Log("*** FinalizeConnection unable to add client " + client.IpPort);
+                Common.Log("*** FinalizeConnection unable to add client " + client.IpPort);
                 client.Dispose();
                 return;
             }
@@ -523,7 +519,7 @@
 
             if (!String.IsNullOrEmpty(PresharedKey))
             {
-                Log("*** FinalizeConnection soliciting authentication material from " + client.IpPort);
+                Common.Log("*** FinalizeConnection soliciting authentication material from " + client.IpPort);
                 _UnauthenticatedClients.TryAdd(client.IpPort, DateTime.Now);
 
                 byte[] data = Encoding.UTF8.GetBytes("Authentication required");
@@ -535,7 +531,7 @@
 
             #region Start-Data-Receiver
 
-            Log("*** FinalizeConnection starting data receiver for " + client.IpPort + " (now " + activeCount + " clients)");
+            Common.Log("*** FinalizeConnection starting data receiver for " + client.IpPort + " (now " + activeCount + " clients)");
             if (ClientConnected != null)
             {
                 Task.Run(() => ClientConnected(client.IpPort));
@@ -577,7 +573,7 @@
                 }
                 catch (Exception e)
                 {
-                    Log("*** IsConnected " + client.IpPort + " exception using send: " + e.Message);
+                    Common.Log("*** IsConnected " + client.IpPort + " exception using send: " + e.Message);
                     success = false;
                 }
                 finally
@@ -618,7 +614,7 @@
                 }
                 catch (Exception e)
                 {
-                    Log("*** IsConnected " + client.IpPort + " exception using poll/peek: " + e.Message);
+                    Common.Log("*** IsConnected " + client.IpPort + " exception using poll/peek: " + e.Message);
                     return false;
                 }
                 finally
@@ -662,7 +658,7 @@
                         {
                             if (_UnauthenticatedClients.ContainsKey(client.IpPort))
                             {
-                                Log("*** DataReceiver message received from unauthenticated endpoint: " + client.IpPort);
+                                Common.Log("*** DataReceiver message received from unauthenticated endpoint: " + client.IpPort);
 
                                 if (msg.Status == MessageStatus.AuthRequested)
                                 {
@@ -672,14 +668,11 @@
                                         string clientPsk = Encoding.UTF8.GetString(msg.PresharedKey).Trim();
                                         if (PresharedKey.Trim().Equals(clientPsk))
                                         {
-                                            if (Debug)
-                                            {
-                                                Log("DataReceiver accepted authentication from " + client.IpPort);
-                                            }
+                                            Common.Log("DataReceiver accepted authentication from " + client.IpPort);
 
                                             _UnauthenticatedClients.TryRemove(client.IpPort, out DateTime dt);
                                             byte[] data = Encoding.UTF8.GetBytes("Authentication successful");
-                                            WatsonMessage authMsg = new WatsonMessage(data, Debug)
+                                            WatsonMessage authMsg = new WatsonMessage(data)
                                             {
                                                 Status = MessageStatus.AuthSuccess,
                                             };
@@ -689,13 +682,10 @@
                                         }
                                         else
                                         {
-                                            if (Debug)
-                                            {
-                                                Log("DataReceiver declined authentication from " + client.IpPort);
-                                            }
+                                            Common.Log("DataReceiver declined authentication from " + client.IpPort);
 
                                             byte[] data = Encoding.UTF8.GetBytes("Authentication declined");
-                                            WatsonMessage authMsg = new WatsonMessage(data, Debug)
+                                            WatsonMessage authMsg = new WatsonMessage(data)
                                             {
                                                 Status = MessageStatus.AuthFailure,
                                             };
@@ -706,13 +696,10 @@
                                     }
                                     else
                                     {
-                                        if (Debug)
-                                        {
-                                            Log("DataReceiver no authentication material from " + client.IpPort);
-                                        }
+                                        Common.Log("DataReceiver no authentication material from " + client.IpPort);
 
                                         byte[] data = Encoding.UTF8.GetBytes("No authentication material");
-                                        WatsonMessage authMsg = new WatsonMessage(data, Debug)
+                                        WatsonMessage authMsg = new WatsonMessage(data)
                                         {
                                             Status = MessageStatus.AuthFailure,
                                         };
@@ -724,13 +711,10 @@
                                 else
                                 {
                                     // decline the message
-                                    if (Debug)
-                                    {
-                                        Log("DataReceiver no authentication material from " + client.IpPort);
-                                    }
+                                    Common.Log("DataReceiver no authentication material from " + client.IpPort);
 
                                     byte[] data = Encoding.UTF8.GetBytes("Authentication required");
-                                    WatsonMessage authMsg = new WatsonMessage(data, Debug)
+                                    WatsonMessage authMsg = new WatsonMessage(data)
                                     {
                                         Status = MessageStatus.AuthRequired,
                                     };
@@ -771,7 +755,7 @@
                     Task<bool> unawaited = Task.Run(() => ClientDisconnected(client.IpPort));
                 }
 
-                Log("*** DataReceiver client " + client.IpPort + " disconnected (now " + activeCount + " clients active)");
+                Common.Log("*** DataReceiver client " + client.IpPort + " disconnected (now " + activeCount + " clients active)");
                 client.Dispose();
             }
         }
@@ -781,7 +765,7 @@
             _Clients.TryRemove(client.IpPort, out ClientMetadata removedClient);
             _Clients.TryAdd(client.IpPort, client);
 
-            Log("*** AddClient added client " + client.IpPort);
+            Common.Log("*** AddClient added client " + client.IpPort);
             return true;
         }
 
@@ -790,7 +774,7 @@
             _Clients.TryRemove(client.IpPort, out ClientMetadata removedClient);
             _UnauthenticatedClients.TryRemove(client.IpPort, out DateTime dt);
 
-            Log("*** RemoveClient removed client " + client.IpPort);
+            Common.Log("*** RemoveClient removed client " + client.IpPort);
             return true;
         }
 
@@ -803,7 +787,7 @@
              *
              */
 
-            WatsonMessage msg = new WatsonMessage(client.TrafficStream, Debug);
+            WatsonMessage msg = new WatsonMessage(client.TrafficStream);
             await msg.Build(ReadDataStream);
             return msg;
         }
@@ -875,7 +859,7 @@
             }
             catch (Exception e)
             {
-                Log("*** MessageWrite " + client.IpPort + " disconnected due to exception: " + e.Message);
+                Common.Log("*** MessageWrite " + client.IpPort + " disconnected due to exception: " + e.Message);
                 return false;
             }
             finally
@@ -951,7 +935,7 @@
             }
             catch (Exception e)
             {
-                Log("*** MessageWriteAsync " + client.IpPort + " disconnected due to exception: " + e.Message);
+                Common.Log("*** MessageWriteAsync " + client.IpPort + " disconnected due to exception: " + e.Message);
                 return false;
             }
             finally

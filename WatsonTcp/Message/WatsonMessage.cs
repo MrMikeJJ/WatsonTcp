@@ -14,8 +14,6 @@
     {
         #region Private-Fields
 
-        private readonly bool _Debug = false;
-
         private readonly string _DateTimeFormat = "MMddyyyyTHHmmssffffffz";
 
         private readonly Stream _TrafficStream;
@@ -66,8 +64,7 @@
         /// Construct a new message to send.
         /// </summary>
         /// <param name="data">The data to send.</param>
-        /// <param name="debug">Enable or disable debugging.</param>
-        internal WatsonMessage(byte[] data, bool debug)
+        internal WatsonMessage(byte[] data)
         {
             if (data == null || data.Length < 1)
             {
@@ -80,8 +77,6 @@
             _ContentLength = data.Length;
             _Data = new byte[data.Length];
             Buffer.BlockCopy(data, 0, Data, 0, data.Length);
-
-            _Debug = debug;
         }
 
         /// <summary>
@@ -89,8 +84,7 @@
         /// </summary>
         /// <param name="contentLength">The number of bytes included in the stream.</param>
         /// <param name="stream">The stream containing the data.</param>
-        /// <param name="debug">Enable or disable debugging.</param>
-        internal WatsonMessage(long contentLength, Stream stream, bool debug)
+        internal WatsonMessage(long contentLength, Stream stream)
         {
             if (contentLength < 0)
             {
@@ -110,16 +104,13 @@
 
             _ContentLength = contentLength;
             _DataStream = stream;
-
-            _Debug = debug;
         }
 
         /// <summary>
         /// Read from a stream and construct a message.  Call Build() to populate.
         /// </summary>
         /// <param name="stream">NetworkStream.</param>
-        /// <param name="debug">Enable or disable console debugging.</param>
-        internal WatsonMessage(Stream stream, bool debug)
+        internal WatsonMessage(Stream stream)
         {
             if (stream == null)
             {
@@ -135,7 +126,6 @@
             Status = MessageStatus.Normal;
 
             _TrafficStream = stream;
-            _Debug = debug;
         }
 
         #endregion
@@ -230,7 +220,7 @@
                     Int64.TryParse(msgLengthString, out long length);
                     _Length = length;
 
-                    Log("Message payload length: " + Length + " bytes");
+                    Common.Log("Message payload length: " + Length + " bytes");
                 }
 
                 #endregion
@@ -248,7 +238,7 @@
                     if (HeaderFields[i])
                     {
                         MessageField field = GetMessageField(i);
-                        Log("Reading header field " + i + " " + field.Name + " " + field.Type.ToString() + " " + field.Length + " bytes");
+                        Common.Log("Reading header field " + i + " " + field.Name + " " + field.Type.ToString() + " " + field.Length + " bytes");
 
                         object val = await ReadField(field.Type, field.Length, field.Name);
                         SetMessageValue(field, val);
@@ -283,13 +273,13 @@
             }
             catch (Exception e)
             {
-                Log(Common.SerializeJson(e));
+                Common.Log(Common.SerializeJson(e));
                 throw;
             }
             finally
             {
-                Log("Message build completed:");
-                Log(this.ToString());
+                Common.Log("Message build completed:");
+                Common.Log(this.ToString());
             }
         }
 
@@ -314,18 +304,18 @@
             {
                 if (HeaderFields[i])
                 {
-                    Log("Header field " + i + " is set");
+                    Common.Log("Header field " + i + " is set");
 
                     MessageField field = GetMessageField(i);
                     switch (i)
                     {
                         case 0: // preshared key
-                            Log("PresharedKey: " + Encoding.UTF8.GetString(PresharedKey));
+                            Common.Log("PresharedKey: " + Encoding.UTF8.GetString(PresharedKey));
                             ret = AppendBytes(ret, PresharedKey);
                             break;
 
                         case 1: // status
-                            Log("Status: " + Status.ToString() + " " + (int)Status);
+                            Common.Log("Status: " + Status.ToString() + " " + (int)Status);
                             ret = AppendBytes(ret, IntegerToBytes((int)Status));
                             break;
 
@@ -340,7 +330,7 @@
             #region Prepend-Message-Length
 
             long finalLen = ret.Length + contentLength;
-            Log("Content length: " + finalLen + " (" + ret.Length + " + " + contentLength + ")");
+            Common.Log("Content length: " + finalLen + " (" + ret.Length + " + " + contentLength + ")");
 
             byte[] lengthHeader = Encoding.UTF8.GetBytes(finalLen.ToString() + ":");
             byte[] final = new byte[(lengthHeader.Length + ret.Length)];
@@ -349,7 +339,7 @@
 
             #endregion
 
-            Log("ToHeaderBytes returning: " + Encoding.UTF8.GetString(final));
+            Common.Log("ToHeaderBytes returning: " + Encoding.UTF8.GetString(final));
             return final;
         }
 
@@ -509,7 +499,7 @@
 
         private async Task<byte[]> ReadFromNetwork(long count, string field)
         {
-            Log("ReadFromNetwork " + count + " " + field);
+            Common.Log("ReadFromNetwork " + count + " " + field);
 
             string logMessage = null;
 
@@ -557,7 +547,7 @@
             }
             finally
             {
-                Log("- Result: " + field + " " + count + ": " + logMessage);
+                Common.Log("- Result: " + field + " " + count + ": " + logMessage);
             }
         }
 
@@ -669,11 +659,11 @@
             switch (bitNumber)
             {
                 case 0:
-                    Log("Returning field PresharedKey");
+                    Common.Log("Returning field PresharedKey");
                     return new MessageField(0, "PresharedKey", FieldType.ByteArray, 16);
 
                 case 1:
-                    Log("Returning field Status");
+                    Common.Log("Returning field Status");
                     return new MessageField(1, "Status", FieldType.Int32, 4);
 
                 default:
@@ -697,26 +687,18 @@
             {
                 case 0:
                     _PresharedKey = (byte[])val;
-                    Log("PresharedKey set: " + Encoding.UTF8.GetString(PresharedKey));
+                    Common.Log("PresharedKey set: " + Encoding.UTF8.GetString(PresharedKey));
 
                     return;
 
                 case 1:
                     Status = (MessageStatus)(int)val;
-                    Log("Status set: " + Status.ToString());
+                    Common.Log("Status set: " + Status.ToString());
 
                     return;
 
                 default:
                     throw new ArgumentException("Unknown bit number.");
-            }
-        }
-
-        private void Log(string msg)
-        {
-            if (_Debug)
-            {
-                Console.WriteLine(msg);
             }
         }
 
