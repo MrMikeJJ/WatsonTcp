@@ -220,7 +220,7 @@
                     Int64.TryParse(msgLengthString, out long length);
                     _Length = length;
 
-                    Common.Log("Message payload length: " + Length + " bytes");
+                    Common.Log($"Message payload length: {Length} bytes");
                 }
 
                 #endregion
@@ -238,7 +238,7 @@
                     if (HeaderFields[i])
                     {
                         MessageField field = GetMessageField(i);
-                        Common.Log("Reading header field " + i + " " + field.Name + " " + field.Type.ToString() + " " + field.Length + " bytes");
+                        Common.Log($"Reading header field {i} {field.Name} {field.Type.ToString()} {field.Length}");
 
                         object val = await ReadField(field.Type, field.Length, field.Name);
                         SetMessageValue(field, val);
@@ -304,18 +304,18 @@
             {
                 if (HeaderFields[i])
                 {
-                    Common.Log("Header field " + i + " is set");
+                    Common.Log($"Header field {i} is set");
 
                     MessageField field = GetMessageField(i);
                     switch (i)
                     {
                         case 0: // preshared key
-                            Common.Log("PresharedKey: " + Encoding.UTF8.GetString(PresharedKey));
+                            Common.Log($"PresharedKey: {Encoding.UTF8.GetString(PresharedKey)}");
                             ret = AppendBytes(ret, PresharedKey);
                             break;
 
                         case 1: // status
-                            Common.Log("Status: " + Status.ToString() + " " + (int)Status);
+                            Common.Log($"Status: {Status.ToString()} {(int)Status}");
                             ret = AppendBytes(ret, IntegerToBytes((int)Status));
                             break;
 
@@ -330,7 +330,7 @@
             #region Prepend-Message-Length
 
             long finalLen = ret.Length + contentLength;
-            Common.Log("Content length: " + finalLen + " (" + ret.Length + " + " + contentLength + ")");
+            Common.Log($"Content length: {finalLen} ({ret.Length} + {contentLength})");
 
             byte[] lengthHeader = Encoding.UTF8.GetBytes(finalLen.ToString() + ":");
             byte[] final = new byte[(lengthHeader.Length + ret.Length)];
@@ -350,13 +350,13 @@
         public override string ToString()
         {
             string ret = "---" + Environment.NewLine;
-            ret += "  Header fields : " + FieldToString(FieldType.Bits, HeaderFields) + Environment.NewLine;
-            ret += "  Preshared key : " + FieldToString(FieldType.ByteArray, PresharedKey) + Environment.NewLine;
-            ret += "  Status        : " + FieldToString(FieldType.Int32, (int)Status) + Environment.NewLine;
+            ret += $"  Header fields : {FieldToString(FieldType.Bits, HeaderFields)}" + Environment.NewLine;
+            ret += $"  Preshared key : {FieldToString(FieldType.ByteArray, PresharedKey)}" + Environment.NewLine;
+            ret += $"  Status        : {FieldToString(FieldType.Int32, (int)Status)}" + Environment.NewLine;
 
             if (Data != null)
             {
-                ret += "  Data          : " + Data.Length + " bytes" + Environment.NewLine;
+                ret += $"  Data          : {Data.Length} bytes" + Environment.NewLine;
                 if (Data.Length > 0)
                 {
                     Console.WriteLine(Encoding.UTF8.GetString(Data));
@@ -365,7 +365,7 @@
 
             if (DataStream != null)
             {
-                ret += "  DataStream    : present, " + ContentLength + " bytes" + Environment.NewLine;
+                ret += $"  DataStream    : present, {ContentLength} bytes" + Environment.NewLine;
             }
 
             return ret;
@@ -390,7 +390,7 @@
 
         private async Task<object> ReadField(FieldType fieldType, int maxLength, string name)
         {
-            string logMessage = "ReadField " + fieldType.ToString() + " " + maxLength + " " + name;
+            string logMessage = $"ReadField {fieldType.ToString()} {maxLength} {name}";
 
             try
             {
@@ -401,41 +401,41 @@
 
                 if (fieldType == FieldType.Int32)
                 {
-                    data = await ReadFromNetwork(maxLength, name + " Int32 (" + maxLength + ")");
+                    data = await ReadFromNetwork(maxLength, $"{name} Int32 ({maxLength})");
                     logMessage += " " + ByteArrayToHex(data);
                     ret = Convert.ToInt32(Encoding.UTF8.GetString(data));
                     logMessage += ": " + ret;
                 }
                 else if (fieldType == FieldType.Int64)
                 {
-                    data = await ReadFromNetwork(maxLength, name + " Int64 (" + maxLength + ")");
+                    data = await ReadFromNetwork(maxLength, $"{name} Int64 ({maxLength})");
                     logMessage += " " + ByteArrayToHex(data);
                     ret = Convert.ToInt64(Encoding.UTF8.GetString(data));
                     logMessage += ": " + ret;
                 }
                 else if (fieldType == FieldType.String)
                 {
-                    data = await ReadFromNetwork(maxLength, name + " String (" + maxLength + ")");
+                    data = await ReadFromNetwork(maxLength, $"{name} String ({maxLength})");
                     logMessage += " " + ByteArrayToHex(data);
                     ret = Encoding.UTF8.GetString(data);
                     logMessage += ": " + headerLength + " " + ret;
                 }
                 else if (fieldType == FieldType.DateTime)
                 {
-                    data = await ReadFromNetwork(_DateTimeFormat.Length, name + " DateTime");
+                    data = await ReadFromNetwork(_DateTimeFormat.Length, $"{name} DateTime");
                     logMessage += " " + ByteArrayToHex(data);
                     ret = DateTime.ParseExact(Encoding.UTF8.GetString(data), _DateTimeFormat, CultureInfo.InvariantCulture);
                     logMessage += ": " + headerLength + " " + ret.ToString();
                 }
                 else if (fieldType == FieldType.ByteArray)
                 {
-                    ret = await ReadFromNetwork(maxLength, name + " ByteArray (" + maxLength + ")");
+                    ret = await ReadFromNetwork(maxLength, $"{name} ByteArray ({maxLength})");
                     logMessage += " " + ByteArrayToHex((byte[])ret);
                     logMessage += ": " + headerLength + " " + ByteArrayToHex((byte[])ret);
                 }
                 else
                 {
-                    throw new ArgumentException("Unknown field type: " + fieldType.ToString());
+                    throw new ArgumentException($"Unknown field type: {fieldType.ToString()}");
                 }
 
                 return ret;
@@ -493,13 +493,13 @@
             }
             else
             {
-                throw new ArgumentException("Unknown field type: " + fieldType.ToString());
+                throw new ArgumentException($"Unknown field type: {fieldType.ToString()}");
             }
         }
 
         private async Task<byte[]> ReadFromNetwork(long count, string field)
         {
-            Common.Log("ReadFromNetwork " + count + " " + field);
+            Common.Log($"ReadFromNetwork {count} {field}");
 
             string logMessage = null;
 
@@ -547,7 +547,7 @@
             }
             finally
             {
-                Common.Log("- Result: " + field + " " + count + ": " + logMessage);
+                Common.Log($"- Result: {field} {count}: {logMessage}");
             }
         }
 
@@ -687,13 +687,13 @@
             {
                 case 0:
                     _PresharedKey = (byte[])val;
-                    Common.Log("PresharedKey set: " + Encoding.UTF8.GetString(PresharedKey));
+                    Common.Log($"PresharedKey set: {Encoding.UTF8.GetString(PresharedKey)}");
 
                     return;
 
                 case 1:
                     Status = (MessageStatus)(int)val;
-                    Common.Log("Status set: " + Status.ToString());
+                    Common.Log($"Status set: {Status.ToString()}");
 
                     return;
 

@@ -310,7 +310,7 @@
 
             presharedKey = presharedKey.PadRight(16, ' ');
             WatsonMessage msg = new WatsonMessage(MessageStatus.AuthRequested, presharedKey);
-            MessageWrite(msg);
+            _Server.MessageWrite(msg, _ReadStreamBufferSize);
         }
 
         /// <summary>
@@ -320,7 +320,7 @@
         /// <returns>Boolean indicating if the message was sent successfully.</returns>
         public bool Send(byte[] data)
         {
-            return MessageWrite(data);
+            return _Server.MessageWrite(data, _ReadStreamBufferSize);
         }
 
         /// <summary>
@@ -331,7 +331,8 @@
         /// <returns>Boolean indicating if the message was sent successfully.</returns>
         public bool Send(long contentLength, Stream stream)
         {
-            return MessageWrite(contentLength, stream);
+            WatsonMessage msg = new WatsonMessage(contentLength, stream);
+            return _Server.MessageWrite(msg, _ReadStreamBufferSize);
         }
 
         /// <summary>
@@ -341,7 +342,7 @@
         /// <returns>Task with Boolean indicating if the message was sent successfully.</returns>
         public async Task<bool> SendAsync(byte[] data)
         {
-            return await MessageWriteAsync(data);
+            return await _Server.MessageWriteAsync(data, _ReadStreamBufferSize);
         }
 
         /// <summary>
@@ -352,7 +353,8 @@
         /// <returns>Task with Boolean indicating if the message was sent successfully.</returns>
         public async Task<bool> SendAsync(long contentLength, Stream stream)
         {
-            return await MessageWriteAsync(contentLength, stream);
+            WatsonMessage msg = new WatsonMessage(contentLength, stream);
+            return await _Server.MessageWriteAsync(msg, _ReadStreamBufferSize);
         }
 
         #endregion
@@ -481,15 +483,6 @@
 
                 #endregion
             }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-            catch (IOException)
-            {
-            }
             catch (Exception e)
             {
                 Common.Log("*** DataReceiver server disconnected unexpectedly");
@@ -499,326 +492,7 @@
             {
                 Connected = false;
                 ServerDisconnected?.Invoke();
-            }
-        }
-
-        private bool MessageWrite(WatsonMessage msg)
-        {
-            bool disconnectDetected = false;
-            long dataLen = 0;
-            if (msg.Data != null)
-            {
-                dataLen = msg.Data.Length;
-            }
-
-            try
-            {
-                if (_Server.TcpClient == null)
-                {
-                    Common.Log("MessageWrite client is null");
-                    disconnectDetected = true;
-                    return false;
-                }
-
-                byte[] headerBytes = msg.ToHeaderBytes(dataLen);
-
-                _Server.WriteLock.Wait(1);
-
-                try
-                {
-                    _Server.TrafficStream.Write(headerBytes, 0, headerBytes.Length);
-                    if (msg.Data != null && msg.Data.Length > 0)
-                    {
-                        _Server.TrafficStream.Write(msg.Data, 0, msg.Data.Length);
-                    }
-
-                    _Server.TrafficStream.Flush();
-                }
-                finally
-                {
-                    _Server.WriteLock.Release();
-                }
-
-                string logMessage = "MessageWrite sent " + Encoding.UTF8.GetString(headerBytes);
-                Common.Log(logMessage);
-                return true;
-            }
-            catch (ObjectDisposedException ObjDispInner)
-            {
-                Common.Log("*** MessageWrite server disconnected (obj disposed exception): " + ObjDispInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (SocketException SockInner)
-            {
-                Common.Log("*** MessageWrite server disconnected (socket exception): " + SockInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (InvalidOperationException InvOpInner)
-            {
-                Common.Log("*** MessageWrite server disconnected (invalid operation exception): " + InvOpInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (IOException IOInner)
-            {
-                Common.Log("*** MessageWrite server disconnected (IO exception): " + IOInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (Exception e)
-            {
-                Common.Log(Common.SerializeJson(e));
-                disconnectDetected = true;
-                return false;
-            }
-            finally
-            {
-                if (disconnectDetected)
-                {
-                    Connected = false;
-                    Dispose();
-                }
-            }
-        }
-
-        private bool MessageWrite(byte[] data)
-        {
-            long dataLen = 0;
-
-            using (MemoryStream ms = new MemoryStream())
-            {
-                if (data != null && data.Length > 0)
-                {
-                    dataLen = data.Length;
-                    ms.Write(data, 0, data.Length);
-                    ms.Seek(0, SeekOrigin.Begin);
-                }
-
-                return MessageWrite(dataLen, ms);
-            }
-        }
-
-        private bool MessageWrite(long contentLength, Stream stream)
-        {
-            if (contentLength < 0)
-            {
-                throw new ArgumentException("Content length must be zero or greater bytes.");
-            }
-
-            if (contentLength > 0)
-            {
-                if (stream == null || !stream.CanRead)
-                {
-                    throw new ArgumentException("Cannot read from supplied stream.");
-                }
-            }
-
-            bool disconnectDetected = false;
-
-            try
-            {
-                if (_Server.TcpClient == null)
-                {
-                    Common.Log("MessageWrite client is null");
-                    disconnectDetected = true;
-                    return false;
-                }
-
-                WatsonMessage msg = new WatsonMessage(contentLength, stream);
-                byte[] headerBytes = msg.ToHeaderBytes(contentLength);
-
-                int bytesRead = 0;
-                long bytesRemaining = contentLength;
-                byte[] buffer = new byte[_ReadStreamBufferSize];
-
-                _Server.WriteLock.Wait(1);
-
-                try
-                {
-                    _Server.TrafficStream.Write(headerBytes, 0, headerBytes.Length);
-
-                    if (contentLength > 0)
-                    {
-                        while (bytesRemaining > 0)
-                        {
-                            bytesRead = stream.Read(buffer, 0, buffer.Length);
-                            if (bytesRead > 0)
-                            {
-                                _Server.TrafficStream.Write(buffer, 0, bytesRead);
-                                bytesRemaining -= bytesRead;
-                            }
-                        }
-                    }
-
-                    _Server.TrafficStream.Flush();
-                }
-                finally
-                {
-                    _Server.WriteLock.Release();
-                }
-
-                string logMessage = "MessageWrite sent " + Encoding.UTF8.GetString(headerBytes);
-                Common.Log(logMessage);
-                return true;
-            }
-            catch (ObjectDisposedException ObjDispInner)
-            {
-                Common.Log("*** MessageWrite server disconnected (obj disposed exception): " + ObjDispInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (SocketException SockInner)
-            {
-                Common.Log("*** MessageWrite server disconnected (socket exception): " + SockInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (InvalidOperationException InvOpInner)
-            {
-                Common.Log("*** MessageWrite server disconnected (invalid operation exception): " + InvOpInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (IOException IOInner)
-            {
-                Common.Log("*** MessageWrite server disconnected (IO exception): " + IOInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (Exception e)
-            {
-                Common.LogException("MessageWrite", e);
-                disconnectDetected = true;
-                return false;
-            }
-            finally
-            {
-                if (disconnectDetected)
-                {
-                    Connected = false;
-                    Dispose();
-                }
-            }
-        }
-
-        private async Task<bool> MessageWriteAsync(byte[] data)
-        {
-            long dataLen = 0;
-            using (MemoryStream ms = new MemoryStream())
-            {
-                if (data != null)
-                {
-                    dataLen = data.Length;
-                    ms.Write(data, 0, data.Length);
-                    ms.Seek(0, SeekOrigin.Begin);
-                }
-
-                return await MessageWriteAsync(dataLen, ms);
-            }
-        }
-
-        private async Task<bool> MessageWriteAsync(long contentLength, Stream stream)
-        {
-            if (contentLength < 0)
-            {
-                throw new ArgumentException("Content length must be zero or greater bytes.");
-            }
-
-            if (contentLength > 0)
-            {
-                if (stream == null || !stream.CanRead)
-                {
-                    throw new ArgumentException("Cannot read from supplied stream.");
-                }
-            }
-
-            bool disconnectDetected = false;
-
-            try
-            {
-                if (_Server.TcpClient == null)
-                {
-                    Common.Log("MessageWriteAsync client is null");
-                    disconnectDetected = true;
-                    return false;
-                }
-
-                WatsonMessage msg = new WatsonMessage(contentLength, stream);
-                byte[] headerBytes = msg.ToHeaderBytes(contentLength);
-
-                int bytesRead = 0;
-                long bytesRemaining = contentLength;
-                byte[] buffer = new byte[_ReadStreamBufferSize];
-
-                await _Server.WriteLock.WaitAsync();
-
-                try
-                {
-                    await _Server.TrafficStream.WriteAsync(headerBytes, 0, headerBytes.Length);
-
-                    if (contentLength > 0)
-                    {
-                        while (bytesRemaining > 0)
-                        {
-                            bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                            if (bytesRead > 0)
-                            {
-                                await _Server.TrafficStream.WriteAsync(buffer, 0, bytesRead);
-                                bytesRemaining -= bytesRead;
-                            }
-                        }
-                    }
-
-                    await _Server.TrafficStream.FlushAsync();
-                }
-                finally
-                {
-                    _Server.WriteLock.Release();
-                }
-
-                string logMessage = "MessageWriteAsync sent " + Encoding.UTF8.GetString(headerBytes);
-                Common.Log(logMessage);
-                return true;
-            }
-            catch (ObjectDisposedException ObjDispInner)
-            {
-                Common.Log("*** MessageWriteAsync server disconnected (obj disposed exception): " + ObjDispInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (SocketException SockInner)
-            {
-                Common.Log("*** MessageWriteAsync server disconnected (socket exception): " + SockInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (InvalidOperationException InvOpInner)
-            {
-                Common.Log("*** MessageWriteAsync server disconnected (invalid operation exception): " + InvOpInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (IOException IOInner)
-            {
-                Common.Log("*** MessageWriteAsync server disconnected (IO exception): " + IOInner.Message);
-                disconnectDetected = true;
-                return false;
-            }
-            catch (Exception e)
-            {
-                Common.LogException("MessageWriteAsync", e);
-                disconnectDetected = true;
-                return false;
-            }
-            finally
-            {
-                if (disconnectDetected)
-                {
-                    Connected = false;
-                    Dispose();
-                }
+                _Server.Dispose();
             }
         }
 

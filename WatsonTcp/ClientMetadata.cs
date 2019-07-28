@@ -5,6 +5,7 @@
     using System.Net.Security;
     using System.Net.Sockets;
     using System.Security.Cryptography.X509Certificates;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using WatsonTcp.Message;
@@ -124,6 +125,150 @@
             WatsonMessage msg = new WatsonMessage(TrafficStream);
             await msg.Build(readDataStream);
             return msg;
+        }
+
+        internal bool MessageWrite(byte[] data, int readStreamBufferSize)
+        {
+            int dataLen = 0;
+            using (MemoryStream ms = new MemoryStream())
+            {
+                if (data != null && data.Length > 0)
+                {
+                    dataLen = data.Length;
+                    ms.Write(data, 0, data.Length);
+                    ms.Seek(0, SeekOrigin.Begin);
+                }
+
+                WatsonMessage msg = new WatsonMessage(dataLen, ms);
+                return MessageWrite(msg, readStreamBufferSize);
+            }
+        }
+
+        internal bool MessageWrite(WatsonMessage msg, int readStreamBufferSize)
+        {
+            if (msg == null)
+            {
+                throw new ArgumentNullException(nameof(msg));
+            }
+
+            if (msg.ContentLength > 0)
+            {
+                if (msg.DataStream == null || !msg.DataStream.CanRead)
+                {
+                    throw new ArgumentException("Cannot read from supplied stream.");
+                }
+            }
+
+            byte[] headerBytes = msg.ToHeaderBytes(msg.ContentLength);
+
+            int bytesRead = 0;
+            long bytesRemaining = msg.ContentLength;
+            byte[] buffer = new byte[readStreamBufferSize];
+
+            _WriteLock.Wait(1);
+
+            try
+            {
+                _TrafficStream.Write(headerBytes, 0, headerBytes.Length);
+
+                if (msg.ContentLength > 0)
+                {
+                    while (bytesRemaining > 0)
+                    {
+                        bytesRead = msg.DataStream.Read(buffer, 0, buffer.Length);
+                        if (bytesRead > 0)
+                        {
+                            _TrafficStream.Write(buffer, 0, bytesRead);
+                            bytesRemaining -= bytesRead;
+                        }
+                    }
+                }
+
+                _TrafficStream.Flush();
+
+                return true;
+            }
+            catch (Exception e)
+            {
+                Common.Log($"*** MessageWrite {_IpPort} disconnected due to exception: {e.Message}");
+                return false;
+            }
+            finally
+            {
+                _WriteLock.Release();
+            }
+        }
+
+        internal async Task<bool> MessageWriteAsync(byte[] data, int readStreamBufferSize)
+        {
+            int dataLen = 0;
+            using (MemoryStream ms = new MemoryStream())
+            {
+                if (data != null && data.Length > 0)
+                {
+                    dataLen = data.Length;
+                    ms.Write(data, 0, data.Length);
+                    ms.Seek(0, SeekOrigin.Begin);
+                }
+
+                WatsonMessage msg = new WatsonMessage(dataLen, ms);
+                return await MessageWriteAsync(msg, readStreamBufferSize);
+            }
+        }
+
+        internal async Task<bool> MessageWriteAsync(WatsonMessage msg, int readStreamBufferSize)
+        {
+            if (msg == null)
+            {
+                throw new ArgumentNullException(nameof(msg));
+            }
+
+            if (msg.ContentLength > 0)
+            {
+                if (msg.DataStream == null || !msg.DataStream.CanRead)
+                {
+                    throw new ArgumentException("Cannot read from supplied stream.");
+                }
+            }
+
+            byte[] headerBytes = msg.ToHeaderBytes(msg.ContentLength);
+
+            int bytesRead = 0;
+            long bytesRemaining = msg.ContentLength;
+            byte[] buffer = new byte[readStreamBufferSize];
+
+            try
+            {
+                await _WriteLock.WaitAsync();
+                await _TrafficStream.WriteAsync(headerBytes, 0, headerBytes.Length);
+
+                if (msg.ContentLength > 0)
+                {
+                    while (bytesRemaining > 0)
+                    {
+                        bytesRead = await msg.DataStream.ReadAsync(buffer, 0, buffer.Length);
+                        if (bytesRead > 0)
+                        {
+                            await _TrafficStream.WriteAsync(buffer, 0, bytesRead);
+                            bytesRemaining -= bytesRead;
+                        }
+                    }
+                }
+
+                await _TrafficStream.FlushAsync();
+
+                Common.Log($"MessageWriteAsync sent {Encoding.UTF8.GetString(headerBytes)}");
+                return true;
+            }
+            catch (Exception e)
+            {
+                Common.Log($"*** MessageWriteAsync {_IpPort} disconnected due to exception: {e.Message}");
+                return false;
+            }
+            finally
+            {
+                _WriteLock.Release();
+            }
         }
 
         #endregion
