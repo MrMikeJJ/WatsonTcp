@@ -125,7 +125,7 @@
         private readonly Mode _Mode;
         private readonly string _ServerIp;
         private readonly int _ServerPort;
-        private ClientMetadata _Server;
+        private WatsonConnection _Server;
 
         private readonly X509Certificate2 _SslCertificate;
         private readonly X509Certificate2Collection _SslCertificateCollection;
@@ -250,7 +250,7 @@
 
                 client.EndConnect(asyncResult);
 
-                _Server = new ClientMetadata(client, _Mode, AcceptInvalidCertificates);
+                _Server = new WatsonConnection(client, _Mode, AcceptInvalidCertificates);
                 if (_Mode == Mode.Ssl)
                 {
                     _Server.SslStream.AuthenticateAsClient(_ServerIp, _SslCertificateCollection, SslProtocols.Tls12, !AcceptInvalidCertificates);

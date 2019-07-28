@@ -10,7 +10,7 @@
     using System.Threading.Tasks;
     using WatsonTcp.Message;
 
-    internal class ClientMetadata : IDisposable
+    internal class WatsonConnection : IDisposable
     {
         #region Private-Fields
 
@@ -30,7 +30,7 @@
 
         #region Constructors
 
-        internal ClientMetadata(TcpClient tcp, Mode mode, bool acceptInvalidCertificates)
+        internal WatsonConnection(TcpClient tcp, Mode mode, bool acceptInvalidCertificates)
         {
             _TcpClient = tcp ?? throw new ArgumentNullException(nameof(tcp));
             _NetworkStream = tcp.GetStream();

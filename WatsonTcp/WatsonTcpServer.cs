@@ -113,7 +113,7 @@
         private readonly X509Certificate2 _SslCertificate;
 
         private int _ActiveClients;
-        private readonly ConcurrentDictionary<string, ClientMetadata> _Clients;
+        private readonly ConcurrentDictionary<string, WatsonConnection> _Clients;
         private readonly ConcurrentDictionary<string, DateTime> _UnauthenticatedClients;
 
         private readonly CancellationTokenSource _TokenSource;
@@ -193,7 +193,7 @@
             _Token = _TokenSource.Token;
 
             _ActiveClients = 0;
-            _Clients = new ConcurrentDictionary<string, ClientMetadata>();
+            _Clients = new ConcurrentDictionary<string, WatsonConnection>();
             _UnauthenticatedClients = new ConcurrentDictionary<string, DateTime>();
         }
 
@@ -235,7 +235,7 @@
         /// <returns>Boolean indicating if the message was sent successfully.</returns>
         public bool Send(string ipPort, byte[] data)
         {
-            if (!_Clients.TryGetValue(ipPort, out ClientMetadata client))
+            if (!_Clients.TryGetValue(ipPort, out WatsonConnection client))
             {
                 Common.Log($"*** Send unable to find client {ipPort}");
                 return false;
@@ -253,7 +253,7 @@
         /// <returns>Boolean indicating if the message was sent successfully.</returns>
         public bool Send(string ipPort, long contentLength, Stream stream)
         {
-            if (!_Clients.TryGetValue(ipPort, out ClientMetadata client))
+            if (!_Clients.TryGetValue(ipPort, out WatsonConnection client))
             {
                 Common.Log($"*** Send unable to find client {ipPort}");
                 return false;
@@ -271,7 +271,7 @@
         /// <returns>Task with Boolean indicating if the message was sent successfully.</returns>
         public async Task<bool> SendAsync(string ipPort, byte[] data)
         {
-            if (!_Clients.TryGetValue(ipPort, out ClientMetadata client))
+            if (!_Clients.TryGetValue(ipPort, out WatsonConnection client))
             {
                 Common.Log($"*** SendAsync unable to find client {ipPort}");
                 return false;
@@ -289,7 +289,7 @@
         /// <returns>Task with Boolean indicating if the message was sent successfully.</returns>
         public async Task<bool> SendAsync(string ipPort, long contentLength, Stream stream)
         {
-            if (!_Clients.TryGetValue(ipPort, out ClientMetadata client))
+            if (!_Clients.TryGetValue(ipPort, out WatsonConnection client))
             {
                 Common.Log($"*** SendAsync unable to find client {ipPort}");
                 return false;
@@ -305,7 +305,7 @@
         /// <returns>Boolean indicating if the client is connected to the server.</returns>
         public bool IsClientConnected(string ipPort)
         {
-            return _Clients.TryGetValue(ipPort, out ClientMetadata client);
+            return _Clients.TryGetValue(ipPort, out WatsonConnection client);
         }
 
         /// <summary>
@@ -314,9 +314,9 @@
         /// <returns>A string list containing each client IP:port.</returns>
         public List<string> ListClients()
         {
-            Dictionary<string, ClientMetadata> clients = _Clients.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            Dictionary<string, WatsonConnection> clients = _Clients.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
             List<string> ret = new List<string>();
-            foreach (KeyValuePair<string, ClientMetadata> curr in clients)
+            foreach (KeyValuePair<string, WatsonConnection> curr in clients)
             {
                 ret.Add(curr.Key);
             }
@@ -329,7 +329,7 @@
         /// </summary>
         public void DisconnectClient(string ipPort)
         {
-            if (!_Clients.TryGetValue(ipPort, out ClientMetadata client))
+            if (!_Clients.TryGetValue(ipPort, out WatsonConnection client))
             {
                 Common.Log($"*** DisconnectClient unable to find client {ipPort}");
             }
@@ -363,7 +363,7 @@
 
                 if (_Clients != null && _Clients.Count > 0)
                 {
-                    foreach (KeyValuePair<string, ClientMetadata> currMetadata in _Clients)
+                    foreach (KeyValuePair<string, WatsonConnection> currMetadata in _Clients)
                     {
                         currMetadata.Value.Dispose();
                     }
@@ -402,7 +402,7 @@
                         }
                     }
 
-                    ClientMetadata client = new ClientMetadata(tcpClient, _Mode, AcceptInvalidCertificates);
+                    WatsonConnection client = new WatsonConnection(tcpClient, _Mode, AcceptInvalidCertificates);
                     clientIpPort = client.IpPort;
 
                     #endregion
@@ -440,7 +440,7 @@
             }
         }
 
-        private async Task<bool> StartTls(ClientMetadata client)
+        private async Task<bool> StartTls(WatsonConnection client)
         {
             try
             {
@@ -497,7 +497,7 @@
             return true;
         }
 
-        private void FinalizeConnection(ClientMetadata client)
+        private void FinalizeConnection(WatsonConnection client)
         {
             #region Add-to-Client-List
 
@@ -539,7 +539,7 @@
             #endregion
         }
 
-        private bool IsConnected(ClientMetadata client)
+        private bool IsConnected(WatsonConnection client)
         {
             if (client.TcpClient.Connected)
             {
@@ -622,7 +622,7 @@
             }
         }
 
-        private async Task DataReceiver(ClientMetadata client)
+        private async Task DataReceiver(WatsonConnection client)
         {
             try
             {
@@ -743,18 +743,18 @@
             }
         }
 
-        private bool AddClient(ClientMetadata client)
+        private bool AddClient(WatsonConnection client)
         {
-            _Clients.TryRemove(client.IpPort, out ClientMetadata removedClient);
+            _Clients.TryRemove(client.IpPort, out WatsonConnection removedClient);
             _Clients.TryAdd(client.IpPort, client);
 
             Common.Log($"*** AddClient added client {client.IpPort}");
             return true;
         }
 
-        private bool RemoveClient(ClientMetadata client)
+        private bool RemoveClient(WatsonConnection client)
         {
-            _Clients.TryRemove(client.IpPort, out ClientMetadata removedClient);
+            _Clients.TryRemove(client.IpPort, out WatsonConnection removedClient);
             _UnauthenticatedClients.TryRemove(client.IpPort, out DateTime dt);
 
             Common.Log($"*** RemoveClient removed client {client.IpPort}");
