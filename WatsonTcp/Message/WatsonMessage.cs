@@ -31,60 +31,12 @@
         #region Constructors
 
         /// <summary>
-        /// Construct a message. Used for Authentication requests.
-        /// </summary>
-        /// <param name="messageStatus">The messaqge status type.</param>
-        internal WatsonMessage(MessageStatus messageStatus)
-        {
-            InitBitArray(HeaderFields);
-            Status = messageStatus;
-        }
-
-        /// <summary>
-        /// Construct a message. Used for Authentication responses.
-        /// </summary>
-        /// <param name="messageStatus">The messaqge status type.</param>
-        /// <param name="preSharedKey">The preshared key for authentication.</param>
-        internal WatsonMessage(MessageStatus messageStatus, string preSharedKey)
-        {
-            InitBitArray(HeaderFields);
-            Status = messageStatus;
-
-            if (preSharedKey != null && preSharedKey.Length != 16)
-            {
-                throw new ArgumentException("PresharedKey must be 16 bytes.");
-            }
-
-            _PresharedKey = new byte[16];
-            Buffer.BlockCopy(Encoding.UTF8.GetBytes(preSharedKey), 0, _PresharedKey, 0, 16);
-            HeaderFields[0] = true;
-        }
-
-        /// <summary>
         /// Construct a new message to send.
         /// </summary>
-        /// <param name="data">The data to send.</param>
-        internal WatsonMessage(byte[] data)
-        {
-            if (data == null || data.Length < 1)
-            {
-                throw new ArgumentNullException(nameof(data));
-            }
-
-            InitBitArray(HeaderFields);
-            Status = MessageStatus.Normal;
-
-            _ContentLength = data.Length;
-            _Data = new byte[data.Length];
-            Buffer.BlockCopy(data, 0, Data, 0, data.Length);
-        }
-
-        /// <summary>
-        /// Construct a new message to send.
-        /// </summary>
+        /// <param name="messageStatus">The message status type.</param>
         /// <param name="contentLength">The number of bytes included in the stream.</param>
         /// <param name="stream">The stream containing the data.</param>
-        internal WatsonMessage(long contentLength, Stream stream)
+        internal WatsonMessage(MessageStatus messageStatus, long contentLength, Stream stream)
         {
             if (contentLength < 0)
             {
@@ -100,7 +52,7 @@
             }
 
             InitBitArray(HeaderFields);
-            Status = MessageStatus.Normal;
+            Status = messageStatus;
 
             _ContentLength = contentLength;
             _DataStream = stream;
@@ -154,7 +106,21 @@
         /// <summary>
         /// Preshared key for connection authentication.  HeaderFields[0], 16 bytes.
         /// </summary>
-        internal byte[] PresharedKey => _PresharedKey;
+        internal byte[] PresharedKey
+        {
+            get => _PresharedKey;
+            set
+            {
+                if (value != null && value.Length != 16)
+                {
+                    throw new ArgumentException("PresharedKey must be 16 bytes.");
+                }
+
+                _PresharedKey = new byte[16];
+                Buffer.BlockCopy(value, 0, _PresharedKey, 0, 16);
+                HeaderFields[0] = true;
+            }
+        }
 
         /// <summary>
         /// Status of the message.  HeaderFields[1], 4 bytes.

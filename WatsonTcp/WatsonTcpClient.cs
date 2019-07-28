@@ -309,8 +309,16 @@
             }
 
             presharedKey = presharedKey.PadRight(16, ' ');
-            WatsonMessage msg = new WatsonMessage(MessageStatus.AuthRequested, presharedKey);
-            _Server.MessageWrite(msg, _ReadStreamBufferSize);
+
+            using (MemoryStream ms = new MemoryStream())
+            {
+                WatsonMessage msg = new WatsonMessage(MessageStatus.AuthRequested, 0, null)
+                {
+                    PresharedKey = Encoding.UTF8.GetBytes(presharedKey)
+                };
+
+                _Server.MessageWrite(msg, _ReadStreamBufferSize);
+            }
         }
 
         /// <summary>
@@ -320,7 +328,7 @@
         /// <returns>Boolean indicating if the message was sent successfully.</returns>
         public bool Send(byte[] data)
         {
-            return _Server.MessageWrite(data, _ReadStreamBufferSize);
+            return _Server.MessageWrite(MessageStatus.Normal, data, _ReadStreamBufferSize);
         }
 
         /// <summary>
@@ -331,7 +339,7 @@
         /// <returns>Boolean indicating if the message was sent successfully.</returns>
         public bool Send(long contentLength, Stream stream)
         {
-            WatsonMessage msg = new WatsonMessage(contentLength, stream);
+            WatsonMessage msg = new WatsonMessage(MessageStatus.Normal, contentLength, stream);
             return _Server.MessageWrite(msg, _ReadStreamBufferSize);
         }
 
@@ -342,7 +350,7 @@
         /// <returns>Task with Boolean indicating if the message was sent successfully.</returns>
         public async Task<bool> SendAsync(byte[] data)
         {
-            return await _Server.MessageWriteAsync(data, _ReadStreamBufferSize);
+            return await _Server.MessageWriteAsync(MessageStatus.Normal, data, _ReadStreamBufferSize);
         }
 
         /// <summary>
@@ -353,7 +361,7 @@
         /// <returns>Task with Boolean indicating if the message was sent successfully.</returns>
         public async Task<bool> SendAsync(long contentLength, Stream stream)
         {
-            WatsonMessage msg = new WatsonMessage(contentLength, stream);
+            WatsonMessage msg = new WatsonMessage(MessageStatus.Normal, contentLength, stream);
             return await _Server.MessageWriteAsync(msg, _ReadStreamBufferSize);
         }
 

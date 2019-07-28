@@ -127,19 +127,17 @@
             return msg;
         }
 
-        internal bool MessageWrite(byte[] data, int readStreamBufferSize)
+        internal bool MessageWrite(MessageStatus messageStatus, byte[] data, int readStreamBufferSize)
         {
-            int dataLen = 0;
             using (MemoryStream ms = new MemoryStream())
             {
                 if (data != null && data.Length > 0)
                 {
-                    dataLen = data.Length;
                     ms.Write(data, 0, data.Length);
                     ms.Seek(0, SeekOrigin.Begin);
                 }
 
-                WatsonMessage msg = new WatsonMessage(dataLen, ms);
+                WatsonMessage msg = new WatsonMessage(messageStatus, data.Length, ms);
                 return MessageWrite(msg, readStreamBufferSize);
             }
         }
@@ -199,19 +197,17 @@
             }
         }
 
-        internal async Task<bool> MessageWriteAsync(byte[] data, int readStreamBufferSize)
+        internal async Task<bool> MessageWriteAsync(MessageStatus messageStatus, byte[] data, int readStreamBufferSize)
         {
-            int dataLen = 0;
             using (MemoryStream ms = new MemoryStream())
             {
                 if (data != null && data.Length > 0)
                 {
-                    dataLen = data.Length;
                     ms.Write(data, 0, data.Length);
                     ms.Seek(0, SeekOrigin.Begin);
                 }
 
-                WatsonMessage msg = new WatsonMessage(dataLen, ms);
+                WatsonMessage msg = new WatsonMessage(messageStatus, data.Length, ms);
                 return await MessageWriteAsync(msg, readStreamBufferSize);
             }
         }

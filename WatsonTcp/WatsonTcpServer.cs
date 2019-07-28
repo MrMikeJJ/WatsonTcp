@@ -241,7 +241,7 @@
                 return false;
             }
 
-            return client.MessageWrite(data, _ReadStreamBufferSize);
+            return client.MessageWrite(MessageStatus.Normal, data, _ReadStreamBufferSize);
         }
 
         /// <summary>
@@ -259,7 +259,7 @@
                 return false;
             }
 
-            WatsonMessage msg = new WatsonMessage(contentLength, stream);
+            WatsonMessage msg = new WatsonMessage(MessageStatus.Normal, contentLength, stream);
             return client.MessageWrite(msg, _ReadStreamBufferSize);
         }
 
@@ -277,7 +277,7 @@
                 return false;
             }
 
-            return await client.MessageWriteAsync(data, _ReadStreamBufferSize);
+            return await client.MessageWriteAsync(MessageStatus.Normal, data, _ReadStreamBufferSize);
         }
 
         /// <summary>
@@ -295,7 +295,7 @@
                 return false;
             }
 
-            WatsonMessage msg = new WatsonMessage(contentLength, stream);
+            WatsonMessage msg = new WatsonMessage(MessageStatus.Normal, contentLength, stream);
             return await client.MessageWriteAsync(msg, _ReadStreamBufferSize);
         }
 
@@ -521,8 +521,7 @@
                 _UnauthenticatedClients.TryAdd(client.IpPort, DateTime.Now);
 
                 byte[] data = Encoding.UTF8.GetBytes("Authentication required");
-                WatsonMessage authMsg = new WatsonMessage(MessageStatus.AuthRequired);
-                client.MessageWrite(authMsg, _ReadStreamBufferSize);
+                client.MessageWrite(MessageStatus.AuthRequired, data, _ReadStreamBufferSize);
             }
 
             #endregion
@@ -676,12 +675,7 @@
 
                                             _UnauthenticatedClients.TryRemove(client.IpPort, out DateTime dt);
                                             byte[] data = Encoding.UTF8.GetBytes("Authentication successful");
-                                            WatsonMessage authMsg = new WatsonMessage(data)
-                                            {
-                                                Status = MessageStatus.AuthSuccess,
-                                            };
-
-                                            client.MessageWrite(authMsg, _ReadStreamBufferSize);
+                                            client.MessageWrite(MessageStatus.AuthSuccess, data, _ReadStreamBufferSize);
                                             continue;
                                         }
                                         else
@@ -689,12 +683,7 @@
                                             Common.Log($"DataReceiver declined authentication from {client.IpPort}");
 
                                             byte[] data = Encoding.UTF8.GetBytes("Authentication declined");
-                                            WatsonMessage authMsg = new WatsonMessage(data)
-                                            {
-                                                Status = MessageStatus.AuthFailure,
-                                            };
-
-                                            client.MessageWrite(authMsg, _ReadStreamBufferSize);
+                                            client.MessageWrite(MessageStatus.AuthFailure, data, _ReadStreamBufferSize);
                                             continue;
                                         }
                                     }
@@ -703,12 +692,7 @@
                                         Common.Log($"DataReceiver no authentication material from {client.IpPort}");
 
                                         byte[] data = Encoding.UTF8.GetBytes("No authentication material");
-                                        WatsonMessage authMsg = new WatsonMessage(data)
-                                        {
-                                            Status = MessageStatus.AuthFailure,
-                                        };
-
-                                        client.MessageWrite(authMsg, _ReadStreamBufferSize);
+                                        client.MessageWrite(MessageStatus.AuthFailure, data, _ReadStreamBufferSize);
                                         continue;
                                     }
                                 }
@@ -718,12 +702,7 @@
                                     Common.Log($"DataReceiver no authentication material from {client.IpPort}");
 
                                     byte[] data = Encoding.UTF8.GetBytes("Authentication required");
-                                    WatsonMessage authMsg = new WatsonMessage(data)
-                                    {
-                                        Status = MessageStatus.AuthRequired,
-                                    };
-
-                                    client.MessageWrite(authMsg, _ReadStreamBufferSize);
+                                    client.MessageWrite(MessageStatus.AuthRequired, data, _ReadStreamBufferSize);
                                     continue;
                                 }
                             }
