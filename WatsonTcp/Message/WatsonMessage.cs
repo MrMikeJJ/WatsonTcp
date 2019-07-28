@@ -52,7 +52,7 @@
             }
 
             InitBitArray(HeaderFields);
-            Status = messageStatus;
+            _Status = messageStatus;
 
             _ContentLength = contentLength;
             _DataStream = stream;
@@ -128,7 +128,7 @@
         internal MessageStatus Status
         {
             get => _Status;
-            set
+            private set
             {
                 _Status = value;
                 HeaderFields[1] = true;
@@ -138,11 +138,7 @@
         /// <summary>
         /// Message data.
         /// </summary>
-        internal byte[] Data
-        {
-            get => _Data;
-            set => _Data = value;
-        }
+        internal byte[] Data => _Data;
 
         /// <summary>
         /// Stream containing the message data.

@@ -108,10 +108,11 @@
                 {
                     _TcpClient.Close();
                 }
+
+                _ReadLock.Dispose();
+                _WriteLock.Dispose();
             }
 
-            ReadLock.Dispose();
-            WriteLock.Dispose();
 
             _Disposed = true;
         }
@@ -159,14 +160,13 @@
 
             byte[] headerBytes = msg.ToHeaderBytes(msg.ContentLength);
 
-            int bytesRead = 0;
+            int bytesRead;
             long bytesRemaining = msg.ContentLength;
             byte[] buffer = new byte[readStreamBufferSize];
 
-            _WriteLock.Wait(1);
-
             try
             {
+                _WriteLock.Wait(1);
                 _TrafficStream.Write(headerBytes, 0, headerBytes.Length);
 
                 if (msg.ContentLength > 0)
@@ -229,7 +229,7 @@
 
             byte[] headerBytes = msg.ToHeaderBytes(msg.ContentLength);
 
-            int bytesRead = 0;
+            int bytesRead;
             long bytesRemaining = msg.ContentLength;
             byte[] buffer = new byte[readStreamBufferSize];
 
