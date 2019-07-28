@@ -1,65 +1,167 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Net.Security;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace WatsonTcp.Message
+﻿namespace WatsonTcp.Message
 {
-    internal class WatsonMessage
+    using System;
+    using System.Collections;
+    using System.Collections.Generic;
+    using System.Diagnostics;
+    using System.Globalization;
+    using System.IO;
+    using System.Linq;
+    using System.Text;
+    using System.Threading.Tasks;
+
+    public class WatsonMessage
     {
-        #region Public-Members
+        #region Private-Fields
+
+        private readonly string _DateTimeFormat = "MMddyyyyTHHmmssffffffz";
+
+        private readonly Stream _TrafficStream;
+        private byte[] _PresharedKey;
+        private MessageStatus _Status;
+
+        private long _Length;
+        private long _ContentLength;
+        private BitArray _HeaderFields = new BitArray(64);
+        private byte[] _Data;
+        private Stream _DataStream;
+
+        #endregion
+
+        #region Constructors
+
+        /// <summary>
+        /// Construct a message. Used for Authentication requests.
+        /// </summary>
+        /// <param name="messageStatus">The messaqge status type.</param>
+        internal WatsonMessage(MessageStatus messageStatus)
+        {
+            InitBitArray(HeaderFields);
+            Status = messageStatus;
+        }
+
+        /// <summary>
+        /// Construct a message. Used for Authentication responses.
+        /// </summary>
+        /// <param name="messageStatus">The messaqge status type.</param>
+        /// <param name="preSharedKey">The preshared key for authentication.</param>
+        internal WatsonMessage(MessageStatus messageStatus, string preSharedKey)
+        {
+            InitBitArray(HeaderFields);
+            Status = messageStatus;
+
+            if (preSharedKey != null && preSharedKey.Length != 16)
+            {
+                throw new ArgumentException("PresharedKey must be 16 bytes.");
+            }
+
+            _PresharedKey = new byte[16];
+            Buffer.BlockCopy(Encoding.UTF8.GetBytes(preSharedKey), 0, _PresharedKey, 0, 16);
+            HeaderFields[0] = true;
+        }
+
+        /// <summary>
+        /// Construct a new message to send.
+        /// </summary>
+        /// <param name="data">The data to send.</param>
+        internal WatsonMessage(byte[] data)
+        {
+            if (data == null || data.Length < 1)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            InitBitArray(HeaderFields);
+            Status = MessageStatus.Normal;
+
+            _ContentLength = data.Length;
+            _Data = new byte[data.Length];
+            Buffer.BlockCopy(data, 0, Data, 0, data.Length);
+        }
+
+        /// <summary>
+        /// Construct a new message to send.
+        /// </summary>
+        /// <param name="contentLength">The number of bytes included in the stream.</param>
+        /// <param name="stream">The stream containing the data.</param>
+        internal WatsonMessage(long contentLength, Stream stream)
+        {
+            if (contentLength < 0)
+            {
+                throw new ArgumentException("Content length must be zero or greater.");
+            }
+
+            if (contentLength > 0)
+            {
+                if (stream == null || !stream.CanRead)
+                {
+                    throw new ArgumentException("Cannot read from supplied stream.");
+                }
+            }
+
+            InitBitArray(HeaderFields);
+            Status = MessageStatus.Normal;
+
+            _ContentLength = contentLength;
+            _DataStream = stream;
+        }
+
+        /// <summary>
+        /// Read from a stream and construct a message.  Call Build() to populate.
+        /// </summary>
+        /// <param name="stream">NetworkStream.</param>
+        internal WatsonMessage(Stream stream)
+        {
+            if (stream == null)
+            {
+                throw new ArgumentNullException(nameof(stream));
+            }
+
+            if (!stream.CanRead)
+            {
+                throw new ArgumentException("Cannot read from stream.");
+            }
+
+            InitBitArray(HeaderFields);
+            Status = MessageStatus.Normal;
+
+            _TrafficStream = stream;
+        }
+
+        #endregion
+
+        #region Internal-Properties
 
         /// <summary>
         /// Length of all header fields and payload data.
         /// </summary>
-        internal long Length { get; set; }
+        internal long Length => _Length;
 
         /// <summary>
         /// Length of the data.
         /// </summary>
-        internal long ContentLength { get; set; }
+        internal long ContentLength
+        {
+            get => _ContentLength;
+            set => _ContentLength = value;
+        }
 
         /// <summary>
         /// Bit array indicating which fields in the header are set.
         /// </summary>
-        internal BitArray HeaderFields = new BitArray(64);
+        internal BitArray HeaderFields => _HeaderFields;
 
         /// <summary>
         /// Preshared key for connection authentication.  HeaderFields[0], 16 bytes.
         /// </summary>
-        internal byte[] PresharedKey 
-        {
-            get
-            {
-                return _PresharedKey;
-            }
-            set
-            {
-                if (value != null && value.Length != 16) throw new ArgumentException("PresharedKey must be 16 bytes.");
-                _PresharedKey = new byte[16];
-                Buffer.BlockCopy(value, 0, _PresharedKey, 0, 16);
-                HeaderFields[0] = true;
-            }
-        }     
+        internal byte[] PresharedKey => PresharedKey;
 
         /// <summary>
         /// Status of the message.  HeaderFields[1], 4 bytes.
         /// </summary>
         internal MessageStatus Status
         {
-            get
-            {
-                return _Status;
-            }
+            get => _Status;
             set
             {
                 _Status = value;
@@ -70,176 +172,55 @@ namespace WatsonTcp.Message
         /// <summary>
         /// Message data.
         /// </summary>
-        internal byte[] Data { get; set; }
+        internal byte[] Data
+        {
+            get => _Data;
+            set => _Data = value;
+        }
 
         /// <summary>
         /// Stream containing the message data.
         /// </summary>
-        internal Stream DataStream { get; set; }
-
-        /// <summary>
-        /// Size of buffer to use while reading message payload.  Default is 64KB.
-        /// </summary>
-        internal int ReadStreamBuffer
-        {
-            get
-            {
-                return _ReadStreamBuffer;
-            }
-            set
-            {
-                if (value < 1) throw new ArgumentException("ReadStreamBuffer must be greater than zero bytes.");
-                _ReadStreamBuffer = value;
-            }
-        }
+        internal Stream DataStream => _DataStream;
 
         #endregion
 
-        #region Private-Members
-
-        private bool _Debug = false;
-
-        //                                123456789012345678901234567890
-        private string _DateTimeFormat = "MMddyyyyTHHmmssffffffz"; // 22 bytes
-
-        private NetworkStream _NetworkStream;
-        private SslStream _SslStream;
-        private int _ReadStreamBuffer = 65536;
-        private byte[] _PresharedKey;
-        private MessageStatus _Status;
-
-        #endregion
-
-        #region Constructors-and-Factories
+        #region Internal-Methods
 
         /// <summary>
-        /// Do not use.
+        /// Awaitable async method to build the Message object from data that awaits in a NetworkStream or SslStream.
         /// </summary>
-        internal WatsonMessage()
-        {
-            HeaderFields = new BitArray(64);
-            InitBitArray(HeaderFields);
-            Status = MessageStatus.Normal;
-        }
-
-        /// <summary>
-        /// Construct a new message to send.
-        /// </summary>
-        /// <param name="data">The data to send.</param>
-        /// <param name="debug">Enable or disable debugging.</param>
-        internal WatsonMessage(byte[] data, bool debug)
-        {
-            if (data == null || data.Length < 1) throw new ArgumentNullException(nameof(data));
-
-            HeaderFields = new BitArray(64);
-            InitBitArray(HeaderFields);
-
-            Status = MessageStatus.Normal;
-
-            ContentLength = data.Length;
-            Data = new byte[data.Length];
-            Buffer.BlockCopy(data, 0, Data, 0, data.Length);
-            DataStream = null; 
-
-            _Debug = debug;
-        }
-
-        /// <summary>
-        /// Construct a new message to send.
-        /// </summary>
-        /// <param name="contentLength">The number of bytes included in the stream.</param>
-        /// <param name="stream">The stream containing the data.</param>
-        /// <param name="debug">Enable or disable debugging.</param>
-        internal WatsonMessage(long contentLength, Stream stream, bool debug)
-        {
-            if (contentLength < 0) throw new ArgumentException("Content length must be zero or greater.");
-            if (contentLength > 0)
-            {
-                if (stream == null || !stream.CanRead)
-                {
-                    throw new ArgumentException("Cannot read from supplied stream.");
-                }
-            }
-             
-            HeaderFields = new BitArray(64);
-            InitBitArray(HeaderFields);
-
-            Status = MessageStatus.Normal;
-
-            ContentLength = contentLength;
-            Data = null;
-            DataStream = stream; 
-            
-            _Debug = debug;
-        }
-
-        /// <summary>
-        /// Read from a stream and construct a message.  Call Build() to populate.
-        /// </summary>
-        /// <param name="stream">NetworkStream.</param>
-        /// <param name="debug">Enable or disable console debugging.</param>
-        internal WatsonMessage(NetworkStream stream, bool debug)
-        {
-            if (stream == null) throw new ArgumentNullException(nameof(stream));
-            if (!stream.CanRead) throw new ArgumentException("Cannot read from stream.");
-
-            HeaderFields = new BitArray(64);
-            InitBitArray(HeaderFields);
-            Status = MessageStatus.Normal;
-
-            _NetworkStream = stream;
-            _Debug = debug;
-        }
-
-        /// <summary>
-        /// Read from an SSL-based stream and construct a message.  Call Build() to populate.
-        /// </summary>
-        /// <param name="stream">SslStream.</param>
-        /// <param name="debug">Enable or disable console debugging.</param>
-        internal WatsonMessage(SslStream stream, bool debug)
-        {
-            if (stream == null) throw new ArgumentNullException(nameof(stream));
-            if (!stream.CanRead) throw new ArgumentException("Cannot read from stream.");
-
-            HeaderFields = new BitArray(64);
-            InitBitArray(HeaderFields);
-            Status = MessageStatus.Normal;
-
-            _SslStream = stream;
-            _Debug = debug;
-        }
-
-        #endregion
-
-        #region Public-Methods
-
-        /// <summary>
-        /// Awaitable async method to build the Message object from data that awaits in a NetworkStream or SslStream, returning the full message data.
-        /// </summary>
+        /// <param name="ReadDataStream">If true returns the full message data. If false returns the stream.</param>
         /// <returns>Always returns true (void cannot be a return parameter).</returns>
-        internal async Task<bool> Build()
+        internal async Task<bool> Build(bool ReadDataStream)
         {
             try
-            { 
+            {
                 #region Read-Message-Length
-                 
+
                 using (MemoryStream msgLengthMs = new MemoryStream())
                 {
                     while (true)
                     {
                         byte[] data = await ReadFromNetwork(1, "MessageLength");
                         await msgLengthMs.WriteAsync(data, 0, 1);
-                        if (data[0] == 58) break;
-                    }  
+                        if (data[0] == 58)
+                        {
+                            break;
+                        }
+                    }
 
                     byte[] msgLengthBytes = msgLengthMs.ToArray();
-                    if (msgLengthBytes == null || msgLengthBytes.Length < 1) return false;
-                    string msgLengthString = Encoding.UTF8.GetString(msgLengthBytes).Replace(":", ""); 
-                    long length;
-                    Int64.TryParse(msgLengthString, out length);
-                    Length = length;
+                    if (msgLengthBytes == null || msgLengthBytes.Length < 1)
+                    {
+                        return false;
+                    }
 
-                    if (_Debug) Console.WriteLine("Message payload length: " + Length + " bytes");
+                    string msgLengthString = Encoding.UTF8.GetString(msgLengthBytes).Replace(":", String.Empty);
+                    Int64.TryParse(msgLengthString, out long length);
+                    _Length = length;
+
+                    Common.Log("Message payload length: " + Length + " bytes");
                 }
 
                 #endregion
@@ -248,85 +229,7 @@ namespace WatsonTcp.Message
 
                 byte[] headerFields = await ReadFromNetwork(8, "HeaderFields");
                 headerFields = ReverseByteArray(headerFields);
-                HeaderFields = new BitArray(headerFields);
-
-                long payloadLength = Length - 8;
-
-                for (int i = 0; i < HeaderFields.Length; i++)
-                {
-                    if (HeaderFields[i])
-                    {
-                        MessageField field = GetMessageField(i); 
-                        object val = await ReadField(field.Type, field.Length, field.Name);
-                        SetMessageValue(field, val);
-                        payloadLength -= field.Length;
-                    }
-                }
-
-                ContentLength = payloadLength;
-                DataStream = null;
-                Data = await ReadFromNetwork(ContentLength, "Payload");
-
-                #endregion
-
-                return true;
-            }
-            catch (Exception e)
-            {
-                if (_Debug)
-                {
-                    Console.WriteLine(Common.SerializeJson(e));
-                }
-
-                throw;
-            }
-            finally
-            {
-                if (_Debug)
-                {
-                    Console.WriteLine("Message build completed:");
-                    Console.WriteLine(this.ToString());
-                }
-            }
-        }
-
-        /// <summary>
-        /// Awaitable async method to build the Message object from data that awaits in a NetworkStream or SslStream, returning the stream itself.  
-        /// </summary>
-        /// <returns>Always returns true (void cannot be a return parameter).</returns>
-        internal async Task<bool> BuildStream()
-        {
-            try
-            { 
-                #region Read-Message-Length
-                 
-                using (MemoryStream msgLengthMs = new MemoryStream())
-                {
-                    while (true)
-                    {
-                        byte[] data = await ReadFromNetwork(1, "MessageLength");
-                        await msgLengthMs.WriteAsync(data, 0, 1);
-                        if (data[0] == 58) break;
-                    }
-
-                    byte[] msgLengthBytes = msgLengthMs.ToArray();
-                    if (msgLengthBytes == null || msgLengthBytes.Length < 1) return false;
-                    string msgLengthString = Encoding.UTF8.GetString(msgLengthBytes).Replace(":", "");
-
-                    long length;
-                    Int64.TryParse(msgLengthString, out length);
-                    Length = length;
-
-                    if (_Debug) Console.WriteLine("Message payload length: " + Length + " bytes");
-                }
-
-                #endregion
-
-                #region Process-Header-Fields
-
-                byte[] headerFields = await ReadFromNetwork(8, "HeaderFields");
-                headerFields = ReverseByteArray(headerFields);
-                HeaderFields = new BitArray(headerFields);
+                _HeaderFields = new BitArray(headerFields);
 
                 long payloadLength = Length - 8;
 
@@ -335,27 +238,33 @@ namespace WatsonTcp.Message
                     if (HeaderFields[i])
                     {
                         MessageField field = GetMessageField(i);
-                        if (_Debug) Console.WriteLine("Reading header field " + i + " " + field.Name + " " + field.Type.ToString() + " " + field.Length + " bytes");
+                        Common.Log("Reading header field " + i + " " + field.Name + " " + field.Type.ToString() + " " + field.Length + " bytes");
+
                         object val = await ReadField(field.Type, field.Length, field.Name);
                         SetMessageValue(field, val);
                         payloadLength -= field.Length;
                     }
                 }
 
-                ContentLength = payloadLength;
-                Data = null;
-                 
-                if (_NetworkStream != null)
+                _ContentLength = payloadLength;
+
+                if (ReadDataStream)
                 {
-                    DataStream = _NetworkStream;
-                }
-                else if (_SslStream != null)
-                {
-                    DataStream = _SslStream;
+                    _DataStream = null;
+                    _Data = await ReadFromNetwork(ContentLength, "Payload");
                 }
                 else
                 {
-                    throw new IOException("No suitable input stream found.");
+                    _Data = null;
+
+                    if (_TrafficStream != null)
+                    {
+                        _DataStream = _TrafficStream;
+                    }
+                    else
+                    {
+                        throw new IOException("No suitable input stream found.");
+                    }
                 }
 
                 #endregion
@@ -364,19 +273,13 @@ namespace WatsonTcp.Message
             }
             catch (Exception e)
             {
-                if (_Debug)
-                {
-                    Console.WriteLine(Common.SerializeJson(e));
-                }
-                throw e;
+                Common.Log(Common.SerializeJson(e));
+                throw;
             }
             finally
             {
-                if (_Debug)
-                {
-                    Console.WriteLine("Message build completed:");
-                    Console.WriteLine(this.ToString());
-                }
+                Common.Log("Message build completed:");
+                Common.Log(this.ToString());
             }
         }
 
@@ -394,25 +297,28 @@ namespace WatsonTcp.Message
 
             byte[] ret = new byte[headerFieldsBytes.Length];
             Buffer.BlockCopy(headerFieldsBytes, 0, ret, 0, headerFieldsBytes.Length);
-             
+
             #region Header-Fields
-             
+
             for (int i = 0; i < HeaderFields.Length; i++)
-            { 
+            {
                 if (HeaderFields[i])
                 {
-                    if (_Debug) Console.WriteLine("Header field " + i + " is set");
+                    Common.Log("Header field " + i + " is set");
+
                     MessageField field = GetMessageField(i);
                     switch (i)
                     {
                         case 0: // preshared key
-                            if (_Debug) Console.WriteLine("PresharedKey: " + Encoding.UTF8.GetString(PresharedKey));
+                            Common.Log("PresharedKey: " + Encoding.UTF8.GetString(PresharedKey));
                             ret = AppendBytes(ret, PresharedKey);
                             break;
+
                         case 1: // status
-                            if (_Debug) Console.WriteLine("Status: " + Status.ToString() + " " + (int)Status);
+                            Common.Log("Status: " + Status.ToString() + " " + (int)Status);
                             ret = AppendBytes(ret, IntegerToBytes((int)Status));
                             break;
+
                         default:
                             throw new ArgumentException("Unknown bit number.");
                     }
@@ -424,7 +330,7 @@ namespace WatsonTcp.Message
             #region Prepend-Message-Length
 
             long finalLen = ret.Length + contentLength;
-            if (_Debug) Console.WriteLine("Content length: " + finalLen + " (" + ret.Length + " + " + contentLength + ")");
+            Common.Log("Content length: " + finalLen + " (" + ret.Length + " + " + contentLength + ")");
 
             byte[] lengthHeader = Encoding.UTF8.GetBytes(finalLen.ToString() + ":");
             byte[] final = new byte[(lengthHeader.Length + ret.Length)];
@@ -433,7 +339,7 @@ namespace WatsonTcp.Message
 
             #endregion
 
-            if (_Debug) Console.WriteLine("ToHeaderBytes returning: " + Encoding.UTF8.GetString(final));
+            Common.Log("ToHeaderBytes returning: " + Encoding.UTF8.GetString(final));
             return final;
         }
 
@@ -458,7 +364,9 @@ namespace WatsonTcp.Message
             }
 
             if (DataStream != null)
+            {
                 ret += "  DataStream    : present, " + ContentLength + " bytes" + Environment.NewLine;
+            }
 
             return ret;
         }
@@ -469,10 +377,14 @@ namespace WatsonTcp.Message
 
         private void SetHeaderFieldBitmap()
         {
-            HeaderFields = new BitArray(64);
+            _HeaderFields = new BitArray(64);
             InitBitArray(HeaderFields);
 
-            if (PresharedKey != null && PresharedKey.Length > 0) HeaderFields[0] = true;
+            if (PresharedKey != null && PresharedKey.Length > 0)
+            {
+                HeaderFields[0] = true;
+            }
+
             HeaderFields[1] = true;  // messages will always have a status
         }
 
@@ -481,7 +393,7 @@ namespace WatsonTcp.Message
             string logMessage = "ReadField " + fieldType.ToString() + " " + maxLength + " " + name;
 
             try
-            { 
+            {
                 byte[] data = null;
                 int headerLength = 0;
 
@@ -505,16 +417,16 @@ namespace WatsonTcp.Message
                 {
                     data = await ReadFromNetwork(maxLength, name + " String (" + maxLength + ")");
                     logMessage += " " + ByteArrayToHex(data);
-                    ret = Encoding.UTF8.GetString(data); 
+                    ret = Encoding.UTF8.GetString(data);
                     logMessage += ": " + headerLength + " " + ret;
-                } 
+                }
                 else if (fieldType == FieldType.DateTime)
                 {
-                    data = await ReadFromNetwork(22, name + " DateTime");
+                    data = await ReadFromNetwork(_DateTimeFormat.Length, name + " DateTime");
                     logMessage += " " + ByteArrayToHex(data);
                     ret = DateTime.ParseExact(Encoding.UTF8.GetString(data), _DateTimeFormat, CultureInfo.InvariantCulture);
                     logMessage += ": " + headerLength + " " + ret.ToString();
-                } 
+                }
                 else if (fieldType == FieldType.ByteArray)
                 {
                     ret = await ReadFromNetwork(maxLength, name + " ByteArray (" + maxLength + ")");
@@ -534,65 +446,12 @@ namespace WatsonTcp.Message
             }
         }
 
-        private byte[] FieldToBytes(FieldType fieldType, object data, int maxLength)
-        {
-            if (data == null) throw new ArgumentNullException(nameof(data));
-
-            if (fieldType == FieldType.Int32)
-            {
-                int intVar = Convert.ToInt32(data);
-                string lengthVar = "";
-                for (int i = 0; i < maxLength; i++) lengthVar += "0";
-                return Encoding.UTF8.GetBytes(intVar.ToString(lengthVar));
-            }
-            else if (fieldType == FieldType.Int64)
-            {
-                long longVar = Convert.ToInt64(data);
-                string lengthVar = "";
-                for (int i = 0; i < maxLength; i++) lengthVar += "0";
-                return Encoding.UTF8.GetBytes(longVar.ToString(lengthVar));
-            } 
-            else if (fieldType == FieldType.String)
-            {
-                string dataStr = data.ToString().ToUpper();
-                if (dataStr.Length < maxLength)
-                {
-                    string ret = dataStr.PadRight(maxLength);
-                    return Encoding.UTF8.GetBytes(ret);
-                }
-                else if (dataStr.Length > maxLength)
-                {
-                    string ret = dataStr.Substring(maxLength);
-                    return Encoding.UTF8.GetBytes(ret);
-                }
-                else
-                {
-                    return Encoding.UTF8.GetBytes(dataStr);
-                }
-            }
-            else if (fieldType == FieldType.DateTime)
-            {
-                string dateTime = Convert.ToDateTime(data).ToString(_DateTimeFormat);
-                return Encoding.UTF8.GetBytes(dateTime);
-            }
-            else if (fieldType == FieldType.ByteArray)
-            {
-                if (((byte[])data).Length != maxLength) throw new ArgumentException("Data length does not match length supplied.");
-
-                byte[] ret = new byte[maxLength];
-                InitByteArray(ret);
-                Buffer.BlockCopy((byte[])data, 0, ret, 0, maxLength);
-                return ret;
-            } 
-            else
-            {
-                throw new ArgumentException("Unknown field type: " + fieldType.ToString());
-            }
-        }
-
         private string FieldToString(FieldType fieldType, object data)
         {
-            if (data == null) return null;
+            if (data == null)
+            {
+                return null;
+            }
 
             if (fieldType == FieldType.Int32)
             {
@@ -605,11 +464,11 @@ namespace WatsonTcp.Message
             else if (fieldType == FieldType.String)
             {
                 return "[s]" + data.ToString();
-            } 
+            }
             else if (fieldType == FieldType.DateTime)
             {
                 return "[d]" + Convert.ToDateTime(data).ToString(_DateTimeFormat);
-            } 
+            }
             else if (fieldType == FieldType.ByteArray)
             {
                 return "[b]" + ByteArrayToHex((byte[])data);
@@ -629,6 +488,7 @@ namespace WatsonTcp.Message
                     Array.Reverse(ca);
                     ret += new string(ca) + " ";
                 }
+
                 return ret;
             }
             else
@@ -639,131 +499,105 @@ namespace WatsonTcp.Message
 
         private async Task<byte[]> ReadFromNetwork(long count, string field)
         {
-            if (_Debug) Console.WriteLine("ReadFromNetwork " + count + " " + field);
+            Common.Log("ReadFromNetwork " + count + " " + field);
+
             string logMessage = null;
 
             try
             {
-                if (count <= 0) return null;
+                if (count <= 0)
+                {
+                    return null;
+                }
+
                 int read = 0;
                 byte[] buffer = new byte[count];
                 byte[] ret = null;
 
                 InitByteArray(buffer);
 
-                if (_NetworkStream != null)
-                { 
+                if (_TrafficStream != null)
+                {
                     while (true)
                     {
-                        read = await _NetworkStream.ReadAsync(buffer, 0, buffer.Length);
+                        read = await _TrafficStream.ReadAsync(buffer, 0, buffer.Length);
                         if (read == count)
                         {
                             ret = new byte[read];
                             Buffer.BlockCopy(buffer, 0, ret, 0, read);
                             break;
                         }
-                    } 
+                    }
                 }
-                else if (_SslStream != null)
-                { 
-                    while (true)
-                    {
-                        read = await _SslStream.ReadAsync(buffer, 0, buffer.Length);
-                        if (read == count)
-                        {
-                            ret = new byte[read];
-                            Buffer.BlockCopy(buffer, 0, ret, 0, read);
-                            break;
-                        }
-                    } 
-                } 
                 else
                 {
                     throw new IOException("No suitable input stream found.");
                 }
 
-                if (ret != null && ret.Length > 0) logMessage = ByteArrayToHex(ret);
-                else logMessage = "(null)";
+                if (ret != null && ret.Length > 0)
+                {
+                    logMessage = ByteArrayToHex(ret);
+                }
+                else
+                {
+                    logMessage = "(null)";
+                }
 
                 return ret;
             }
             finally
             {
-                if (_Debug) Console.WriteLine("- Result: " + field + " " + count + ": " + logMessage);
+                Common.Log("- Result: " + field + " " + count + ": " + logMessage);
             }
         }
 
-        private byte[] IntegerToBytes(int i)
+        private static byte[] IntegerToBytes(int i)
         {
-            if (i < 0 || i > 9999) throw new ArgumentException("Integer must be between 0 and 9999.");
+            if (i < 0 || i > 9999)
+            {
+                throw new ArgumentException("Integer must be between 0 and 9999.");
+            }
 
             byte[] ret = new byte[4];
             InitByteArray(ret);
 
             string stringVal = i.ToString("0000");
 
-            ret[3] = (byte)(Convert.ToInt32(stringVal[3]));
-            ret[2] = (byte)(Convert.ToInt32(stringVal[2]));
-            ret[1] = (byte)(Convert.ToInt32(stringVal[1]));
-            ret[0] = (byte)(Convert.ToInt32(stringVal[0]));
+            ret[3] = (byte)Convert.ToInt32(stringVal[3]);
+            ret[2] = (byte)Convert.ToInt32(stringVal[2]);
+            ret[1] = (byte)Convert.ToInt32(stringVal[1]);
+            ret[0] = (byte)Convert.ToInt32(stringVal[0]);
 
             return ret;
         }
 
-        private int BytesToInteger(byte[] bytes)
+        private static void InitByteArray(byte[] data)
         {
-            if (bytes == null || bytes.Length < 1) throw new ArgumentNullException(nameof(bytes));
-
-            // see https://stackoverflow.com/questions/36295952/direct-convertation-between-ascii-byte-and-int?rq=1
-
-            int result = 0;
-
-            for (int i = 0; i < bytes.Length; ++i)
+            if (data == null || data.Length < 1)
             {
-                // ASCII digits are in the range 48 <= n <= 57. This code only
-                // makes sense if we are dealing exclusively with digits, so
-                // throw if we encounter a non-digit character
-                if (bytes[i] < 48 || bytes[i] > 57)
-                {
-                    throw new ArgumentException("Non-digit character present.");
-                }
-
-                // The bytes are in order from most to least significant, so
-                // we need to reverse the index to get the right column number
-                int exp = bytes.Length - i - 1;
-
-                // Digits in ASCII start with 0 at 48, and move sequentially
-                // to 9 at 57, so we can simply subtract 48 from a valid digit
-                // to get its numeric value
-                int digitValue = bytes[i] - 48;
-
-                // Finally, add the digit value times the column value to the
-                // result accumulator
-                result += digitValue * (int)Math.Pow(10, exp);
+                throw new ArgumentNullException(nameof(data));
             }
 
-            return result;
-        }
-
-        private void InitByteArray(byte[] data)
-        {
-            if (data == null || data.Length < 1) throw new ArgumentNullException(nameof(data));
             for (int i = 0; i < data.Length; i++)
             {
                 data[i] = 0x00;
             }
         }
 
-        private void InitBitArray(BitArray data)
+        private static void InitBitArray(BitArray data)
         {
-            if (data == null || data.Length < 1) throw new ArgumentNullException(nameof(data));
+            if (data == null || data.Length < 1)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
             for (int i = 0; i < data.Length; i++)
             {
                 data[i] = false;
             }
         }
 
-        private byte[] AppendBytes(byte[] head, byte[] tail)
+        private static byte[] AppendBytes(byte[] head, byte[] tail)
         {
             byte[] arrayCombined = new byte[head.Length + tail.Length];
             Array.Copy(head, 0, arrayCombined, 0, head.Length);
@@ -771,29 +605,23 @@ namespace WatsonTcp.Message
             return arrayCombined;
         }
 
-        private string ByteArrayToHex(byte[] data)
+        private static string ByteArrayToHex(byte[] data)
         {
             StringBuilder hex = new StringBuilder(data.Length * 2);
-            foreach (byte b in data) hex.AppendFormat("{0:x2}", b);
+            foreach (byte b in data)
+            {
+                hex.AppendFormat("{0:x2}", b);
+            }
+
             return hex.ToString();
         }
 
-        private void ReverseBitArray(BitArray array)
+        private static byte[] ReverseByteArray(byte[] bytes)
         {
-            int length = array.Length;
-            int mid = (length / 2);
-
-            for (int i = 0; i < mid; i++)
+            if (bytes == null || bytes.Length < 1)
             {
-                bool bit = array[i];
-                array[i] = array[length - i - 1];
-                array[length - i - 1] = bit;
+                throw new ArgumentNullException(nameof(bytes));
             }
-        }
-
-        private byte[] ReverseByteArray(byte[] bytes)
-        {
-            if (bytes == null || bytes.Length < 1) throw new ArgumentNullException(nameof(bytes));
 
             byte[] ret = new byte[bytes.Length];
             for (int i = 0; i < bytes.Length; i++)
@@ -804,17 +632,24 @@ namespace WatsonTcp.Message
             return ret;
         }
 
-        private byte ReverseByte(byte b)
+        private static byte ReverseByte(byte b)
         {
-            return (byte)(((b * 0x0802u & 0x22110u) | (b * 0x8020u & 0x88440u)) * 0x10101u >> 16);
+            return (byte)(((((b * 0x0802u) & 0x22110u) | ((b * 0x8020u) & 0x88440u)) * 0x10101u) >> 16);
         }
 
-        private byte[] BitArrayToBytes(BitArray bits)
+        private static byte[] BitArrayToBytes(BitArray bits)
         {
-            if (bits == null || bits.Length < 1) throw new ArgumentNullException(nameof(bits));
-            if (bits.Length % 8 != 0) throw new ArgumentException("BitArray length must be divisible by 8.");
+            if (bits == null || bits.Length < 1)
+            {
+                throw new ArgumentNullException(nameof(bits));
+            }
 
-            byte[] ret = new byte[(bits.Length - 1) / 8 + 1];
+            if (bits.Length % 8 != 0)
+            {
+                throw new ArgumentException("BitArray length must be divisible by 8.");
+            }
+
+            byte[] ret = new byte[((bits.Length - 1) / 8) + 1];
             bits.CopyTo(ret, 0);
             return ret;
         }
@@ -824,11 +659,13 @@ namespace WatsonTcp.Message
             switch (bitNumber)
             {
                 case 0:
-                    if (_Debug) Console.WriteLine("Returning field PresharedKey");
+                    Common.Log("Returning field PresharedKey");
                     return new MessageField(0, "PresharedKey", FieldType.ByteArray, 16);
+
                 case 1:
-                    if (_Debug) Console.WriteLine("Returning field Status");
+                    Common.Log("Returning field Status");
                     return new MessageField(1, "Status", FieldType.Int32, 4);
+
                 default:
                     throw new KeyNotFoundException();
             }
@@ -836,24 +673,35 @@ namespace WatsonTcp.Message
 
         private void SetMessageValue(MessageField field, object val)
         {
-            if (field == null) throw new ArgumentNullException(nameof(field));
-            if (val == null) throw new ArgumentNullException(nameof(val));
+            if (field == null)
+            {
+                throw new ArgumentNullException(nameof(field));
+            }
+
+            if (val == null)
+            {
+                throw new ArgumentNullException(nameof(val));
+            }
 
             switch (field.BitNumber)
             {
                 case 0:
-                    PresharedKey = (byte[])val;
-                    if (_Debug) Console.WriteLine("PresharedKey set: " + Encoding.UTF8.GetString(PresharedKey));
+                    _PresharedKey = (byte[])val;
+                    Common.Log("PresharedKey set: " + Encoding.UTF8.GetString(PresharedKey));
+
                     return;
+
                 case 1:
-                    Status = (MessageStatus)((int)val);
-                    if (_Debug) Console.WriteLine("Status set: " + Status.ToString());
+                    Status = (MessageStatus)(int)val;
+                    Common.Log("Status set: " + Status.ToString());
+
                     return;
+
                 default:
                     throw new ArgumentException("Unknown bit number.");
-            }  
+            }
         }
-         
+
         #endregion
     }
 }
