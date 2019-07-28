@@ -107,9 +107,14 @@
                         {
                             client = new WatsonTcpClient(serverIp, serverPort)
                             {
+                                AuthenticationFailure = AuthenticationFailure,
+                                AuthenticationRequested = AuthenticationRequested,
+                                AuthenticationSucceeded = AuthenticationSucceeded,
                                 ServerConnected = ServerConnected,
                                 ServerDisconnected = ServerDisconnected,
                                 MessageReceived = MessageReceived,
+                                ReadDataStream = true,
+                                ReadStreamBufferSize = 65536,
                             };
 
                             client.Start();
@@ -125,9 +130,14 @@
 
                         client = new WatsonTcpClient(serverIp, serverPort)
                         {
+                            AuthenticationFailure = AuthenticationFailure,
+                            AuthenticationRequested = AuthenticationRequested,
+                            AuthenticationSucceeded = AuthenticationSucceeded,
                             ServerConnected = ServerConnected,
                             ServerDisconnected = ServerDisconnected,
                             MessageReceived = MessageReceived,
+                            ReadDataStream = true,
+                            ReadStreamBufferSize = 65536,
                         };
 
                         client.Start();
