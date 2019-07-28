@@ -154,7 +154,7 @@
         /// <summary>
         /// Preshared key for connection authentication.  HeaderFields[0], 16 bytes.
         /// </summary>
-        internal byte[] PresharedKey => PresharedKey;
+        internal byte[] PresharedKey => _PresharedKey;
 
         /// <summary>
         /// Status of the message.  HeaderFields[1], 4 bytes.
